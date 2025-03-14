@@ -1,0 +1,31 @@
+@startuml
+actor "Distributed Task" as Task
+participant "unique_id" as UniqueID
+participant "ring_id: 14" as Ring14
+participant "rank: 0\ndevice_id: 2" as Rank0
+participant "rank: 1\ndevice_id: 3" as Rank1
+
+== 初始化阶段 ==
+Task -> UniqueID: 生成 unique_id\n(90000000040cb56e5c055...)
+UniqueID -> Rank0: 分发 unique_id
+UniqueID -> Rank1: 分发 unique_id
+note right: unique_id 确保全局通信一致性
+
+Task -> Ring14: 定义通信组
+Ring14 -> Rank0: 初始化\n(rank: 0, nranks: 2)
+Ring14 -> Rank1: 初始化\n(rank: 1, nranks: 2)
+note right: ring_id: 14 定义通信范围
+
+Rank0 -> Rank0: 绑定 device_id: 2
+Rank1 -> Rank1: 绑定 device_id: 3
+note right: device_id 指定物理设备
+
+== 通信阶段 ==
+Task -> Ring14: 执行 mp_allreduce_sum
+Ring14 -> Rank0: 执行 (rank: 0)
+Ring14 -> Rank1: 执行 (rank: 1)
+Rank0 -> Rank1: HCCL 通信
+Rank1 -> Rank0: HCCL 通信
+note right: rank_id 在 ring_id 内协作
+
+@enduml
