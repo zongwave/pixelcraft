@@ -1,0 +1,116 @@
+@startuml
+package "MoE Layer (moe_layer_auto.py)" {
+  class MoELayer {
+    - moe_num_experts: int
+    - experts: nn.LayerList
+    - gate: PretrainedMoEGate
+    - local_gate_part1: LocalGatePart1
+    - local_gate_and_dispatch: LocalGateAndDispatch
+    - local_combine: LocalCombine
+    + __init__(config, moe_num_experts, expert_class, expert_kwargs, gate, ...)
+    + forward(hidden_state, used_token)
+    - _parse_moe_expert_parallel()
+    - _redistribute_experts()
+    - _post_init()
+    - expert_forward(dispatched_input)
+  }
+
+  class LocalGatePart1 {
+    - gate: PretrainedMoEGate
+    + __init__(config, gate, ipp)
+    + forward(hidden_state, gate_weight, e_score_correction_bias, used_token)
+  }
+
+  class LocalGateAndDispatch {
+    - gate: PretrainedMoEGate
+    + __init__(gate, ipp)
+    + forward(reshaped_input, scores)
+  }
+
+  class LocalCombine {
+    + __init__(ipp)
+    + forward(combine_weights, expert_output, dtype, out_shape)
+  }
+
+  MoELayer o--> "1" PretrainedMoEGate
+  MoELayer o--> "1" LocalGatePart1
+  MoELayer o--> "1" LocalGateAndDispatch
+  MoELayer o--> "1" LocalCombine
+  LocalGatePart1 o--> "1" PretrainedMoEGate
+  LocalGateAndDispatch o--> "1" PretrainedMoEGate
+}
+
+package "MoE Gate (moe_gate_auto.py)" {
+  class PretrainedMoEGate {
+    - num_experts: int
+    - top_k: int
+    - capacity_factor: float
+    + __init__(config, num_experts, expert_hidden_size, **kwargs)
+    + top1gating(logits, used_token)
+    + top2gating(logits)
+    + topkgating(gates)
+    + topkgating_part1(gates, e_score_correction_bias)
+    + topkgating_part2(gates)
+    - _priority(topk_idx, capacity)
+    - _topk_greedy(scores, k)
+    - _topk_group_limited_greedy(scores, k, n_group, topk_group)
+    - _topk_noaux_tc(scores, e_score_correction_bias, k, n_group, topk_group)
+  }
+
+  class MoEGateMixin {
+    + gate_score_func(logits)
+    + gumbel_rsample(logits)
+    + uniform_sample(logits)
+    + _one_hot_to_float(x, num_classes)
+    + _one_hot_to_int64(x, num_classes)
+    + _capacity(gates, capacity_factor, max_capacity, min_capacity)
+    + _cal_aux_loss(gates, mask)
+    + _cal_seq_aux_loss(gates, top_k, topk_idx)
+    + _cal_z_loss(logits)
+    + _cal_orthogonal_loss()
+  }
+
+  PretrainedMoEGate -|> nn.Layer
+  PretrainedMoEGate -|> MoEGateMixin
+}
+
+package "MoE Layer (moe_layer.py)" {
+  class MoEFlexTokenLayer {
+    - moe_num_experts: int
+    - experts: nn.LayerList
+    - router: PretrainedMoEGate
+    - token_dispatcher: MoEFlexTokenDispatcher
+    + __init__(config, moe_num_experts, expert_class, expert_kwargs, gate, moe_group)
+    + forward(hidden_states)
+    - expert_forward(dispatched_input, tokens_per_expert)
+  }
+
+  class MoEFlexTokenDispatcher {
+    + token_permutation(hidden_states, probs, routing_map)
+    + token_unpermutation(expert_output, _)
+  }
+
+  MoEFlexTokenLayer o--> "1" PretrainedMoEGate
+  MoEFlexTokenLayer o--> "1" MoEFlexTokenDispatcher
+}
+
+package "Utils (moe_utils.py)" {
+  class permute {
+    + permute(tokens, routing_map, num_out_tokens, drop_and_pad)
+  }
+
+  class unpermute {
+    + unpermute(permuted_tokens, sorted_indices, restore_shape, probs, routing_map, drop_and_pad)
+  }
+
+  MoEFlexTokenDispatcher --> permute
+  MoEFlexTokenDispatcher --> unpermute
+}
+
+LocalGatePart1 -|> LocalLayer
+LocalGateAndDispatch -|> LocalLayer
+LocalCombine -|> LocalLayer
+MoELayer -|> nn.Layer
+MoEFlexTokenLayer -|> nn.Layer
+
+@enduml

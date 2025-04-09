@@ -1,0 +1,145 @@
+@startuml
+package "DeepSeekV2 (modeling.py)" {
+  class DeepseekV2Model {
+    - embed_tokens: nn.Embedding
+    - layers: nn.LayerList
+    - norm: DeepseekV2RMSNorm
+    + __init__(config: DeepseekV2Config)
+    + forward(input_ids, position_ids, attention_mask, ...)
+  }
+
+  class DeepseekV2DecoderLayer {
+    - self_attn: DeepseekV2Attention
+    - mlp: DeepseekV2MoE | DeepseekV2MLP
+    - input_layernorm: DeepseekV2RMSNorm
+    - post_attention_layernorm: DeepseekV2RMSNorm
+    + __init__(config: DeepseekV2Config, layer_idx: int)
+    + forward(hidden_states, position_ids, attention_mask, ...)
+  }
+
+  class DeepseekV2MoE {
+    - shared_experts: DeepseekV2MLP
+    - alpha: float
+    + __init__(config: DeepseekV2Config)
+    + forward(hidden_states)
+  }
+
+  class DeepseekV2MoEFlexToken {
+    - shared_experts: DeepseekV2MLP
+    - alpha: float
+    + __init__(config: DeepseekV2Config)
+    + forward(hidden_states)
+  }
+
+  class DeepseekV2MLP {
+    - gate_proj: Linear
+    - up_proj: Linear
+    - down_proj: Linear
+    - act_fn: callable
+    + __init__(config: DeepseekV2Config, hidden_size, intermediate_size, is_moe)
+    + forward(x)
+  }
+
+  class MoEGate {
+    - weight: Tensor
+    - e_score_correction_bias: Tensor
+    - scoring_func: str
+    - topk_method: str
+    + __init__(config, num_experts, expert_hidden_size, **kwargs)
+    + forward(hidden_states)
+  }
+
+  DeepseekV2Model o--> "many" DeepseekV2DecoderLayer
+  DeepseekV2DecoderLayer o--> "1" DeepseekV2MoE : mlp (conditional)
+  DeepseekV2DecoderLayer o--> "1" DeepseekV2MLP : mlp (conditional)
+  DeepseekV2MoE o--> "1" DeepseekV2MLP : shared_experts
+  DeepseekV2MoEFlexToken o--> "1" DeepseekV2MLP : shared_experts
+}
+
+package "MoE Layer (moe_layer_auto.py)" {
+  class MoELayer {
+    - moe_num_experts: int
+    - experts: nn.LayerList
+    - gate: PretrainedMoEGate
+    - local_gate_part1: LocalGatePart1
+    - local_gate_and_dispatch: LocalGateAndDispatch
+    - local_combine: LocalCombine
+    + __init__(config, moe_num_experts, expert_class, expert_kwargs, gate, ...)
+    + forward(hidden_state, used_token)
+  }
+
+  class LocalGatePart1 {
+    - gate: PretrainedMoEGate
+    + __init__(config, gate, ipp)
+    + forward(hidden_state, gate_weight, e_score_correction_bias, used_token)
+  }
+
+  class LocalGateAndDispatch {
+    - gate: PretrainedMoEGate
+    + __init__(gate, ipp)
+    + forward(reshaped_input, scores)
+  }
+
+  class LocalCombine {
+    + __init__(ipp)
+    + forward(combine_weights, expert_output, dtype, out_shape)
+  }
+
+  MoELayer o--> "1" PretrainedMoEGate
+  MoELayer o--> "1" LocalGatePart1
+  MoELayer o--> "1" LocalGateAndDispatch
+  MoELayer o--> "1" LocalCombine
+  LocalGatePart1 o--> "1" PretrainedMoEGate
+  LocalGateAndDispatch o--> "1" PretrainedMoEGate
+}
+
+package "MoE Layer (moe_layer.py)" {
+  class MoEFlexTokenLayer {
+    - moe_num_experts: int
+    - experts: nn.LayerList
+    - router: PretrainedMoEGate
+    - token_dispatcher: MoEFlexTokenDispatcher
+    + __init__(config, moe_num_experts, expert_class, expert_kwargs, gate, moe_group)
+    + forward(hidden_states)
+  }
+
+  class MoEFlexTokenDispatcher {
+    + token_permutation(hidden_states, probs, routing_map)
+    + token_unpermutation(expert_output, _)
+  }
+
+  MoEFlexTokenLayer o--> "1" PretrainedMoEGate
+  MoEFlexTokenLayer o--> "1" MoEFlexTokenDispatcher
+}
+
+package "MoE Gate (moe_gate_auto.py)" {
+  class PretrainedMoEGate {
+    - num_experts: int
+    - top_k: int
+    - capacity_factor: float
+    + __init__(config, num_experts, expert_hidden_size, **kwargs)
+    + top1gating(logits, used_token)
+    + top2gating(logits)
+    + topkgating(gates)
+    + topkgating_part1(gates, e_score_correction_bias)
+    + topkgating_part2(gates)
+  }
+
+  class MoEGateMixin {
+    + gate_score_func(logits)
+    + gumbel_rsample(logits)
+    + uniform_sample(logits)
+    + _capacity(gates, capacity_factor, max_capacity, min_capacity)
+    + _cal_aux_loss(gates, mask)
+  }
+
+  PretrainedMoEGate -|> MoEGateMixin
+}
+
+DeepseekV2MoE -|> MoELayer
+DeepseekV2MoEFlexToken -|> MoEFlexTokenLayer
+MoEGate -|> PretrainedMoEGate
+MoELayer o--> "many" DeepseekV2MLP : experts
+MoEFlexTokenLayer o--> "many" DeepseekV2MLP : experts
+
+@enduml

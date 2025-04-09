@@ -1,0 +1,34 @@
+@startuml
+actor User
+
+participant "DeepseekV2Model" as Model
+participant "DeepseekV2DecoderLayer" as DecoderLayer
+participant "DeepseekV2MoE" as MoE
+participant "MoEGate" as Gate
+participant "DeepseekV2MLP" as Expert
+participant "DeepseekV2MLP" as SharedExpert
+
+User -> Model: forward(input_ids)
+Model -> DecoderLayer: forward(hidden_states)
+DecoderLayer -> DecoderLayer: input_layernorm(hidden_states)
+DecoderLayer -> DecoderLayer: self_attn(hidden_states)
+DecoderLayer -> DecoderLayer: residual + hidden_states
+DecoderLayer -> DecoderLayer: post_attention_layernorm(hidden_states)
+DecoderLayer -> MoE: forward(hidden_states)
+MoE -> Gate: forward(hidden_states)
+Gate -> Gate: gate_score_func(logits)
+Gate -> Gate: topkgating(scores)
+Gate -> MoE: combine_weights, dispatch_mask, exp_counts, l_aux, l_zloss
+MoE -> MoE: dispatch(hidden_states, dispatch_mask)
+MoE -> Expert: forward(dispatched_input)
+Expert -> MoE: expert_output
+MoE -> MoE: combine(expert_output, combine_weights)
+MoE -> SharedExpert: forward(hidden_states)
+SharedExpert -> MoE: shared_expert_output
+MoE -> MoE: final_hidden_states + shared_expert_output
+MoE -> DecoderLayer: final_hidden_states
+DecoderLayer -> DecoderLayer: residual + final_hidden_states
+DecoderLayer -> Model: hidden_states
+Model -> User: hidden_states
+
+@enduml

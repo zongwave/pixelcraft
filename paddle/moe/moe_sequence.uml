@@ -1,0 +1,30 @@
+@startuml
+actor User
+
+participant "MoELayer" as MoELayer
+participant "LocalGatePart1" as LocalGatePart1
+participant "PretrainedMoEGate" as Gate
+participant "LocalGateAndDispatch" as LocalGateAndDispatch
+participant "Experts" as Experts
+participant "LocalCombine" as LocalCombine
+
+User -> MoELayer: forward(hidden_state, used_token)
+MoELayer -> LocalGatePart1: forward(hidden_state, gate_weight, e_score_correction_bias, used_token)
+LocalGatePart1 -> Gate: gate_score_func(logits)
+Gate -> LocalGatePart1: scores
+LocalGatePart1 -> Gate: topkgating_part1(scores, e_score_correction_bias)
+Gate -> LocalGatePart1: exp_counts, l_aux, l_zloss
+LocalGatePart1 -> MoELayer: reshaped_input, gate_scores, exp_counts, l_aux, l_zloss
+MoELayer -> LocalGateAndDispatch: forward(reshaped_input, gate_scores)
+LocalGateAndDispatch -> Gate: topkgating_part2(gate_scores)
+Gate -> LocalGateAndDispatch: combine_weights, dispatch_mask
+LocalGateAndDispatch -> MoELayer: dispatched_input, combine_weights
+MoELayer -> MoELayer: reshard(dispatched_input)
+MoELayer -> Experts: expert_forward(dispatched_input)
+Experts -> MoELayer: expert_output
+MoELayer -> MoELayer: reshard(expert_output)
+MoELayer -> LocalCombine: forward(combine_weights, expert_output, dtype, out_shape)
+LocalCombine -> MoELayer: combined_output
+MoELayer -> User: combined_output, l_aux, l_zloss
+
+@enduml
