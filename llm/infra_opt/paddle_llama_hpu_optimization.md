@@ -44,8 +44,9 @@
 
 为了更清晰理解后续的融合优化策略，我们回顾 LLaMA 解码器的结构：
 
-![LLaMA 推理结构示意图](llama_decoder.png)
-*图：LLaMA 解码器结构图，展示 RMSNorm、Self-Attention、MLP 的典型堆叠顺序。*
+[![LLaMA 推理结构示意图](diagram/llama_decoder.png)](https://raw.githubusercontent.com/zongwave/notes/main/llm/infra_opt/diagram/llama_decoder.png)
+
+> *图：LLaMA 解码器结构图，展示 RMSNorm、Self-Attention、MLP 的典型堆叠顺序。*
 
 ---
 

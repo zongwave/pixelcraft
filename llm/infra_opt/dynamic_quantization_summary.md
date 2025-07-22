@@ -96,6 +96,6 @@ x = (-1)^s \times (1 + m \times 2^{-3}) \times 2^{e - \text{bias}}
 
 ## 🔚 图示
 
-![LLaMA FP8 动态量化图示](./llama_decoder_fp8_quant_example.png)
+![LLaMA FP8 动态量化图示](diagram/llama_decoder_fp8_quant_example.png)
 
 ---
