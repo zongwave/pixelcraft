@@ -158,8 +158,14 @@ Gain_G = 1
 动态切换算法：
 白点法 → 失败 → 灰世界法 → 单色场景 → 网格分析+中性点校正法
 
-
-[![算法流程](diagram/ep3149936B1.png)](https://raw.githubusercontent.com/zongwave/notes/main/3a/diagram/ep3149936B1.png)
+```mermaid
+graph TD
+    A[输入图像] --> B{白点检测?}
+    B -- 是 --> C[白点算法]
+    B -- 否 --> D{单色场景检测?}
+    D -- 是 --> E[网格分析法+中性点校正]
+    D -- 否 --> F[灰世界算法]
+```
 
 
 ### 关键步骤

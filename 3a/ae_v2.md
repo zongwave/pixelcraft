@@ -68,7 +68,7 @@ $$
 | $10^{0}$ – $10^{2}$  | 过渡区   | 0.018          | ✔ 核心区    |
 | $10^{2}$ – $10^{6}$  | 明视觉   | 0.1            | ×           |
 
-> [![Weber-Fechner亮度响应曲线](diagram/Weber-Fechner_curve.png)](https://github.com/zongwave/notes/blob/main/3a/diagram/Weber-Fechner_curve.png)
+[![Weber-Fechner亮度响应曲线](diagram/Weber-Fechner_curve.png)](https://github.com/zongwave/notes/blob/main/3a/diagram/Weber-Fechner_curve.png)
 
 ---
 
@@ -94,10 +94,34 @@ $$
 
 #### 基于直方图的 AE 控制策略
 
-- **SNR 模型**  
-   $$
-   \text{SNR} = \frac{S}{\sqrt{N_{\text{shot}}^{2} + N_{\text{read}}^{2} + (K \cdot G)^{2}}}
-   $$
+- **SNR 模型**
+
+$$
+\text{SNR} = \frac{S}{\sqrt{N_{\text{shot}}^{2} + N_{\text{read}}^{2} + (K \cdot G)^{2}}}
+$$
+
+> SNR（信噪比）公式符号说明
+
+| 符号                | 物理意义                          | 单位         | 影响因素                                                                 |
+|---------------------|----------------------------------|--------------|--------------------------------------------------------------------------|
+| **S**               | 信号电子数（Signal Electrons）    | 电子数（e⁻）  | 光子通量 × 量子效率（QE） × 积分时间                                      |
+| **N<sub>shot</sub>** | 散粒噪声（Shot Noise）           | e⁻           | 源于光子量子特性：`√S`（泊松分布）                                        |
+| **N<sub>read</sub>** | 读出噪声（Read Noise）           | e⁻           | 传感器读出电路引入（ADC噪声、热噪声等）                                    |
+| **K**               | 噪声增益系数（Noise Factor）      | 无量纲       | 传感器工艺决定（前照式0.4-0.5，背照式0.3-0.4）                           |
+| **G**               | 系统总增益（Total Gain）          | 倍数 或 dB   | 模拟增益 × 数字增益（如4x=12dB）                                         |
+
+> 可视化关系
+```mermaid
+graph LR
+    A[入射光子] --> B[光电转换]
+    B --> C[信号S]
+    C --> D[散粒噪声√S]
+    B --> E[读出电路]
+    E --> F[读出噪声N_read]
+    E --> G[增益噪声K·G]
+    D & F & G --> H[总噪声]
+    C & H --> I[SNR计算]
+```
 
 - **直方图统计**  
    ```python
@@ -114,6 +138,15 @@ $$
 | 峰谷平衡 | 避免直方图两端堆积（防止过曝/欠曝） | `ΔEV = 0.3 * (𝟙{hist[0]/N > 0.05} − 𝟙{hist[255]/N > 0.05})` |
 | 双峰分离 | 识别主体/背景双峰，优化主体峰位置 | `ΔEV = argmax(hist) − 110` |
 | 动态范围优化 | 确保直方图覆盖有效范围（5 %–95 % 区间有分布） | `EV_comp = (hist[5 %] > 0) ? +0.3 : (hist[95 %] < 0.01) ? −0.3 : 0` |
+
+```mermaid
+graph TD
+    A[获取直方图] --> B{峰谷检测}
+    B -- 两端堆积 --> C[峰谷平衡补偿]
+    B -- 正常 --> D{双峰检测}
+    D -- 双峰显著 --> E[双峰分离优化]
+    D -- 单峰 --> F[常规AE调整]
+```
 
 #### 峰谷平衡
 - **背景**：直方图最左（0）和最右（255）如果堆了很多像素，说明画面有大片死黑或死白，属于过曝/欠曝。  
@@ -164,8 +197,19 @@ def weighted_histogram(y_channel, roi_mask):
 ## 5. AE调优
 
 ### 核心框架
-![AE Tuning核心框架](diagram/ae_tunning.png)
 
+```mermaid
+graph TD
+    A[AE调优流程] --> B[基础参数校准]
+    A --> C[场景适应性优化]
+    A --> D[主观画质微调]
+    B --> B1[曝光基准设定]
+    B --> B2[响应曲线建模]
+    C --> C1[动态范围扩展]
+    C --> C2[运动场景优化]
+    D --> D1[肤色保护]
+    D --> D2[高光保留]
+```
 ---
 
 ### 5.1 基础参数校准
@@ -215,10 +259,12 @@ $$
 
 #### 人眼敏感区优化
 - **肤色保护（CbCr椭圆约束）**  
-  在 YCbCr 色彩空间的色度平面（Cb-Cr）中，人类肤色集中在特定椭圆区域内：  
-  $$
-  \frac{(Cb - 156)^2}{8^2} + \frac{(Cr - 120)^2}{7^2} \leq 1
-  $$
+  在 YCbCr 色彩空间的色度平面（Cb-Cr）中，人类肤色集中在特定椭圆区域内：
+
+$$
+\frac{(Cb - 156)^2}{8^2} + \frac{(Cr - 120)^2}{7^2} \leq 1
+$$
+
 - **背光人脸补偿**  
   ```python
   if backlit_face_detected:
