@@ -16,12 +16,19 @@ PixelCraft 是一个综合性的技术知识库，专注于图像信号处理（
 
 ## 目录
 
-- [ISP（图像信号处理）](isp/README.md)
-  - [计算机视觉（CV）](cv/README.md)
-  - [图形学（Graphics）](graphics/README.md)
-  - [人工智能（AI）](ai/README.md)
-  - [工具和脚本](tools/README.md)
-  - [示例和教程](examples/README.md)
+- [图像信号处理 (ISP）](isp/README.md)
+  - [3A (AE/AWB/AF)](isp/3a/README.md)
+  - [图像降噪 (Noise Reduction)](isp/nr/README.md)
+
+- [计算机视觉（CV）](cv/README.md)
+
+- [图形学（Graphics）](graphics/README.md)
+
+- [人工智能（AI）](ai/README.md)
+
+- [工具和脚本](tools/README.md)
+
+- [示例和教程](examples/README.md)
 
 
 ---
