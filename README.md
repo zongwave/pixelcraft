@@ -22,6 +22,7 @@ PixelCraft 是一个综合性的技术知识库，专注于图像信号处理（
   - [图像降噪 (Noise Reduction)](isp/nr/README.md)
   - [图像质量调优 (IQ Tunning)](isp/iq/README.md)
 - [计算机视觉（CV）](cv/README.md)
+  - [数字视频稳定 (Digital Video Stabilization)](cv/dvs_gyro.md)
 - [图形学（Graphics）](graphics/README.md)
 - [人工智能（AI）](ai/README.md)
 - [工具和脚本](tools/README.md)

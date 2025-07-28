@@ -264,8 +264,6 @@ Gain_R \in [0.5, 2.0], \quad Gain_B \in [0.5, 2.0]
 
 
 [![CIE 1931](diagram/cie1931.jpg)](https://raw.githubusercontent.com/zongwave/notes/main/3a/diagram/cie1931.jpg)
-
-
 [![CIE 1976](diagram/cie1976.jpg)](https://raw.githubusercontent.com/zongwave/notes/main/3a/diagram/cie1976.jpg)
 
 
