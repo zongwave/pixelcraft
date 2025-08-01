@@ -68,7 +68,7 @@ $$
 | $10^{0}$ – $10^{2}$  | 过渡区   | 0.018          | ✔ 核心区    |
 | $10^{2}$ – $10^{6}$  | 明视觉   | 0.1            | ×           |
 
-[![Weber-Fechner亮度响应曲线](diagram/Weber-Fechner_curve.png)](https://github.com/zongwave/notes/blob/main/isp/3a/diagram/Weber-Fechner_curve.png)
+[![Weber-Fechner亮度响应曲线](diagram/Weber-Fechner_curve.png)](https://github.com/zongwave/pixelcraft/blob/main/isp/3a/diagram/Weber-Fechner_curve.png)
 
 ---
 

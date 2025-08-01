@@ -260,11 +260,11 @@ Gain_R \in [0.5, 2.0], \quad Gain_B \in [0.5, 2.0]
 ## 5. 色彩空间标准
 
 
-[![CIE 1931](diagram/CIE-1931-colour-matching-function.png)](https://raw.githubusercontent.com/zongwave/notes/main/3a/diagram/CIE-1931-colour-matching-function.png)
+[![CIE 1931](diagram/CIE-1931-colour-matching-function.png)](https://raw.githubusercontent.com/zongwave/pixelcraft/main/isp/3a/diagram/CIE-1931-colour-matching-function.png)
 
 
-[![CIE 1931](diagram/cie1931.jpg)](https://raw.githubusercontent.com/zongwave/notes/main/3a/diagram/cie1931.jpg)
-[![CIE 1976](diagram/cie1976.jpg)](https://raw.githubusercontent.com/zongwave/notes/main/3a/diagram/cie1976.jpg)
+[![CIE 1931](diagram/cie1931.jpg)](https://raw.githubusercontent.com/zongwave/pixelcraft/main/isp/3a/diagram/cie1931.jpg)
+[![CIE 1976](diagram/cie1976.jpg)](https://raw.githubusercontent.com/zongwave/pixelcraft/main/isp/3a/diagram/cie1976.jpg)
 
 
 

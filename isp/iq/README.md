@@ -116,8 +116,8 @@ flowchart TD
   - **用途**：用于自动曝光（AE）和自动白平衡（AWB）的调校。灰度图板通常包含不同灰度级别的区域，帮助相机校准曝光和白平衡。
   - **示例**：灰色图表必须覆盖相机视野范围的中心30%，用于适度质询3A（自动曝光、自动白平衡和自动对焦），因为中心区域没有任何特征。
 
-[![grey scale checker](diagram/greyscale.png)](https://github.com/zongwave/notes/blob/main/isp/iq/diagram/greyscale.png)
-[![3 step grey scale checker](diagram/greyscale-3-step.png)](https://github.com/zongwave/notes/blob/main/isp/iq/diagram/greyscale-3-step.png)
+[![grey scale checker](diagram/greyscale.png)](https://github.com/zongwave/pixelcraft/blob/main/isp/iq/diagram/greyscale.png)
+[![3 step grey scale checker](diagram/greyscale-3-step.png)](https://github.com/zongwave/pixelcraft/blob/main/isp/iq/diagram/greyscale-3-step.png)
 
 
 - **ColorChecker图板**：
@@ -125,8 +125,8 @@ flowchart TD
   - **示例**：本发明所采用的标准色板（ColorChecker）的色块，用于找出各色块对色温偏离的预测曲线，从而调整影像至最接近人眼所看到的色彩。
 
 
-[![24色 colorchecker](diagram/colorchecker-classic.png)](https://github.com/zongwave/notes/blob/main/isp/iq/diagram/colorchecker-classic.png)
-[![140色 colorchecker](diagram/colorchecker-140.png)](https://github.com/zongwave/notes/blob/main/isp/iq/diagram/colorchecker-140.png)
+[![24色 colorchecker](diagram/colorchecker-classic.png)](https://github.com/zongwave/pixelcraft/blob/main/isp/iq/diagram/colorchecker-classic.png)
+[![140色 colorchecker](diagram/colorchecker-140.png)](https://github.com/zongwave/pixelcraft/blob/main/isp/iq/diagram/colorchecker-140.png)
 
 
 - **对焦图板**：
@@ -137,8 +137,8 @@ flowchart TD
   - **示例**：某些测试图板结合了灰度区域和颜色块，用于同时测试自动曝光和自动白平衡。
 
 
-[![ISO 12233](diagram/iso12233.png)](https://github.com/zongwave/notes/blob/main/isp/iq/diagram/iso12233.png)
-[![ISO 12233-2023](diagram/iso12233-2023.png)](https://github.com/zongwave/notes/blob/main/isp/iq/diagram/iso12233-2023.png)
+[![ISO 12233](diagram/iso12233.png)](https://github.com/zongwave/pixelcraft/blob/main/isp/iq/diagram/iso12233.png)
+[![ISO 12233-2023](diagram/iso12233-2023.png)](https://github.com/zongwave/pixelcraft/blob/main/isp/iq/diagram/iso12233-2023.png)
 
 
 > 这些标准图板在3A调校过程中非常重要，因为它们提供了标准化的测试环境，帮助确保相机在不同光照条件和场景下都能准确地调整曝光、白平衡和对焦。

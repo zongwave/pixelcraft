@@ -11,7 +11,7 @@
   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   ISP • CV • 3D • AI
 ```
-[![PixelCraft](tools/PixelCraft.gif)](https://github.com/zongwave/notes/blob/main/tools/PixelCraft.gif)
+[![PixelCraft](tools/PixelCraft.gif)](https://github.com/zongwave/pixelcraft/blob/main/tools/PixelCraft.gif)
 
 PixelCraft 是一个综合性的技术知识库，专注于图像信号处理（ISP）、计算机视觉（CV）、图形学（Graphics）以及人工智能（AI）领域的技术总结和资源分享。我们的目标是为开发者、研究人员和爱好者提供一个丰富的资源平台，以促进技术交流和创新。
 

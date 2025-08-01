@@ -27,7 +27,7 @@
   - 实时视频处理（2K@30fps）
   - 低光照环境视频降噪
 
-[![Noisy Image V.S. 3D NR Image](diagram/noisy_vs_3dnr.png)](https://github.com/zongwave/notes/blob/main/isp/nr/diagram/noisy_vs_3dnr.png)
+[![Noisy Image V.S. 3D NR Image](diagram/noisy_vs_3dnr.png)](https://github.com/zongwave/pixelcraft/blob/main/isp/nr/diagram/noisy_vs_3dnr.png)
 
 
 ### 2. 小波域降噪 （WaveletNR）
