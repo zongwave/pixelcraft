@@ -9,9 +9,10 @@
   * [🔹 掩码注意力 Masked Attention](#掩码注意力masked-attention)
   * [🔹 一句话理解 Attention](#一句话理解-attention)
   * [🔹 注意力优化技术](#注意力优化技术)
-  * [🔹 MQA与GQA详解](#多头注意力机制-mqa与gqa)
+  * [🔹 MQA与GQA 详解](#多头注意力机制-mqa与gqa)
+  * [🔹 Flash Attention 优化](#flash-attention)
+  * [🔹 Flash Attention 优化：Streaming Softmax](#flash-attention-的关键优化streaming-softmax)
 
-  
 ---
 
 以下是《📌 注意力机制 Attention》小节的技术总结，聚焦于 LLaMA 等大模型所采用的注意力机制及其演进
@@ -65,7 +66,29 @@ $$
 
 ---
 
-在多头注意力（Multi-Head Attention, MHA）机制中，我们通常处理的是三类张量：**输入嵌入（input embedding）**、**QKV投影矩阵**、**注意力得分（attention score）**。我们以下图为例说明。
+在多头注意力（Multi-Head Attention, MHA）机制中，我们通常处理的是三类张量：**输入嵌入（input embedding）**、**QKV投影矩阵**、**注意力得分（attention score）**。
+
+---
+
+我们现在以 **Decoder 自注意力（Self-Attention）** 为例，假设 `L_q = L_k = L`，即 query、key 来自同一个 decoder 序列，维度统一记为 $L$，我们来**逐步推导 softmax 的计算维度**。
+
+---
+
+### ✅ 前提设定（多头注意力）
+
+设：
+
+* batch size：$B$
+* head 数量：$H$
+* 每个 head 的维度（即特征维度）：$D$
+* decoder 输入序列长度：$L$
+* 总 hidden\_dim = $H \times D$
+
+输入为 decoder 序列 `X ∈ ℝ^{B × L × hidden_dim}`，经过 Q/K/V 的线性变换与 reshape 得到：
+
+* $Q ∈ ℝ^{B × H × L × D}$
+* $K ∈ ℝ^{B × H × L × D}$
+* $V ∈ ℝ^{B × H × L × D}$
 
 ---
 
@@ -113,7 +136,28 @@ V → (B, H, L, d)
 
 ### 🧮 Attention Score 的计算
 
-注意力得分是通过 Q 与 K 的点积得到的：
+
+注意力得分是通过 Q 与 K 的点积得到的：（QK^T）
+
+我们做矩阵乘法：
+
+$$
+\text{score} = \frac{Q \cdot K^T}{\sqrt{D}}  
+$$
+
+其中 $K^T$ 是对最后两个维度做转置（D 和 L），所以：
+
+* $Q ∈ ℝ^{B × H × L × D}$
+* $K^T ∈ ℝ^{B × H × D × L}$
+* → 打分结果为：
+
+  $$
+  \text{score} ∈ ℝ^{B × H × L × L}
+  $$
+
+这是一个 **L × L 的打分矩阵**，即第 $i$ 个位置的 token 对所有 key 的打分。
+
+
 
 ```python
 score = Q @ K.transpose(-1, -2) / sqrt(d)
@@ -132,20 +176,58 @@ score: (B, H, L, L)
 
 ---
 
-### 🧠 总结
 
-| 张量              | 维度             | 含义                       |
-| --------------- | -------------- | ------------------------ |
-| Input           | `(B, L, D)`    | 原始输入嵌入                   |
-| Q/K/V           | `(B, L, D)`    | 投影后的查询、键、值               |
-| Q/K/V (头分离后)    | `(B, H, L, d)` | 拆分为多个头，每头维度为 `d = D / H` |
-| Attention Score | `(B, H, L, L)` | 每个位置对其他位置的注意力权重          |
-| Output per head | `(B, H, L, d)` | 每个注意力头的加权输出              |
-| Final Output    | `(B, L, D)`    | 所有头连接后的结果，送入下一层          |
+### ✅ Softmax 操作维度
 
+Softmax 是在最后一维（即 key 序列维度）进行的：
+
+$$
+\text{attention\_weights}_{i,j} = \frac{\exp(\text{score}_{i,j})}{\sum_{j'} \exp(\text{score}_{i,j'})}
+$$
+
+因此：
+
+* 对 shape 为 $[B × H × L × L]$ 的 score：
+
+  * **在最后一个维度（L\_k）上做 softmax**
+  * 每一个 query（共 L\_q 个）对所有 key（L\_k 个）计算注意力权重
 
 ---
 
+### ✅ 应用权重计算输出
+
+最后一步是将注意力权重乘上 Value：
+
+$$
+\text{output} = \text{softmax(score)} × V
+$$
+
+即：
+
+* $[B × H × L × L]$ × $[B × H × L × D]$
+* 得到 $output ∈ ℝ^{B × H × L × D}$
+
+再 reshape 回 $[B × L × (H×D)]$ 即可。
+
+---
+
+### 🧠 总结（Decoder 自注意力模式下）
+
+
+| 步骤               | 矩阵     | 维度（假设 L\_q = L\_k = L） | 操作维度说明            |
+| ---------------- | ------ | ---------------------- | ----------------------------- |
+| Input           |         | `(B, L, D)`            |    原始输入嵌入                 |
+| Q/K/V           |         | `(B, L, D)`            | 投影后的查询、键、值           |
+| Q/K/V (头分离后) |         | `(B, H, L, d)`         |  拆分为多个头，每头维度为 `d = D / H` |
+| Q                | Query  | $B × H × L × d$        | —                             |
+| K                | Key    | $B × H × L × d$        | —                             |
+| V                | Value  | $B × H × L × d$        | —                             |
+| Q·Kᵀ             | Scores | $B × H × L × L$        | 最后两个 L 是：每个 query 对所有 key 的打分 |
+| Softmax          | —      | $B × H × L × L$        | **在最后一个维度做 softmax（L\_k）**    |
+| Attention Output | —      | $B × H × L × d$        | 对每个 query 得到加权和               |
+
+
+---
 
 ## 掩码注意力（Masked Attention）
 
@@ -575,6 +657,323 @@ output = torch.stack(outputs, dim=1)
 * 如果你在部署场景中关注推理效率，**MQA 和 GQA 是必须掌握的技术**。
 * LLaMA 默认采用 GQA，参数比例为：`n_q_heads = 32, n_kv_heads = 8`，即每 4 个 Q 头对应一组 KV。
 * 编写自己的模型实现时，GQA 需要注意 **Q 和 KV 的分组匹配关系**，否则输出维度可能不一致。
+
+
+---
+
+
+## Flash Attention
+
+Flash Attention 是一种**高效计算 Transformer 中注意力（Attention）机制**的优化方法，旨在减少内存访问、加快训练速度，并提升计算精度。
+
+---
+
+### 🔧 背景问题
+
+标准的 **Scaled Dot-Product Attention** 计算如下：
+
+```python
+Attention(Q, K, V) = softmax(QKᵀ / √d_k) @ V
+```
+
+这一过程存在两个主要瓶颈：
+
+1. **中间矩阵太大**：QKᵀ 是一个 (seq\_len, seq\_len) 的大矩阵，会消耗大量显存（尤其是长序列时）。
+2. **内存带宽受限**：需要频繁读写中间结果（QKᵀ、softmax、最终结果），造成显存读写瓶颈。
+
+---
+
+### 💡 Flash Attention 的核心思想
+
+**边算边 softmax，直接写入最终输出结果，避免中间缓存！**
+
+> 其灵感来自数值稳定的 softmax 与分块矩阵乘法。
+
+#### 核心优化点：
+
+| 优化维度           | 说明                                              |
+| -------------- | ----------------------------------------------- |
+| ✅ 分块处理         | 将序列划分为多个块，块内计算 attention，降低内存压力                 |
+| ✅ Fused Kernel | 使用 GPU 的 CUDA kernel 融合 QK、Softmax、V 操作，一次性完成   |
+| ✅ 避免中间保存       | 不显式保存 QKᵀ 或 Softmax(QKᵀ)，只保留最终输出                |
+| ✅ 数值稳定性        | 采用 `log-sum-exp` trick 在块级别稳定 softmax 计算，防止梯度爆炸 |
+
+---
+
+### 📉 成果对比（论文中的结论）
+
+* **速度提高 2x\~4x**
+* **显存使用降低 10x（尤其在长序列）**
+* **支持更长序列（10K+）且保持精度**
+* **用于 GPT、BERT、ViT、T5 等模型中性能显著优于传统 Attention**
+
+---
+
+### 🧪 Flash Attention 原理图解（逻辑流程）
+
+```text
+     Q          K           V
+     ↓          ↓           ↓
+[块级 matmul] × [转置 K]           ← 不缓存 QKᵀ
+     ↓
+[数值稳定 softmax]                 ← 每个块内部做
+     ↓
+[matmul with V]                   ← 直接生成结果
+     ↓
+   Output
+```
+
+---
+
+
+### 🚀 应用场景
+
+* 长序列训练：e.g. 文本生成、音乐建模、蛋白质序列等
+* 训练大语言模型（LLM）：如 GPT-3、PaLM、LLaMA 等
+* Hugging Face、OpenAI、PyTorch 都已支持 FlashAttention 1/2
+
+---
+
+### 🧮 FlashAttention vs Standard Attention
+
+| 方面   | 标准 Attention | FlashAttention               |
+| ---- | ------------ | ---------------------------- |
+| 显存消耗 | O(seq\_len²) | O(seq\_len)（线性级别）            |
+| 计算速度 | 慢            | 快（CUDA 加速）                   |
+| 可扩展性 | 难以扩展到长序列     | 易于扩展（10K+ token）             |
+| 精度   | 无优化          | 稳定（块内 softmax + log-sum-exp） |
+
+
+---
+
+
+### ✅ 原理简述：为什么可以不显式保存中间矩阵？
+
+在标准的注意力计算中，存在以下步骤：
+
+```
+Attention(Q, K, V) = softmax(QKᵀ / √d) @ V
+```
+
+* 通常需要显式计算出 `QKᵀ`，这是一个 `seq_len x seq_len` 的矩阵。
+* 然后对其做 Softmax，并与 V 相乘。
+* **内存开销** = 显式保存 `QKᵀ` 和 `softmax(QKᵀ)`，尤其当 `seq_len` 很长时，占用显存巨大。
+
+---
+
+### ⚡ Flash Attention 如何优化？
+
+
+Flash Attention 之所以能够**避免中间保存 QKᵀ 和 Softmax(QKᵀ)**，核心就是采用了 **fused kernel（融合内核）**，并结合 **块状计算（tiling）** 和 **流式（streaming）Softmax** 技术来实现。这种方式在性能与显存优化上都有显著优势。
+
+#### 1. **块状计算（Tiling）**
+
+* 将 Q、K、V 拆成小块（tile），例如 64x64。
+* 一次只处理一个 tile，从而避免一次性存入完整的 `QKᵀ` 矩阵。
+
+#### 2. **在线 Softmax 归一化（Streaming Softmax）**
+
+* Softmax 不需要先获得全部的 `QKᵀ` 结果。
+* 可以通过如下公式 **分步归一化**：
+
+  $$
+  \text{softmax}(x) = \frac{e^{x_i - \max(x)}}{\sum_j e^{x_j - \max(x)}}
+  $$
+
+  在处理块的时候，维护：
+
+  * 当前最大值 `m`（用于数值稳定性）
+  * 当前 `exp_sum`（分母部分）
+  * 当前累积的 `weighted_V`（最终结果）
+
+
+---
+
+
+
+## Flash Attention 的关键优化：Streaming Softmax
+
+FlashAttention 的目标是避免构建完整的 $QK^\top$ 矩阵，也就是避免显式存储 logits（注意力得分），而是 **在分块计算的过程中就完成 softmax 归一化与加权求和**。
+
+这依赖于 softmax 可数值稳定地 **分块更新**，即：
+
+### ✅ 分块更新的三个状态变量：
+
+1. **最大值 $m$**：每一块的最大 logits
+2. **规范化分母 $Z = \sum_j e^{x_j - m}$**（用于归一化）
+3. **当前累积的 weighted\_sum：$\sum_j \text{softmax}_j \cdot V_j$**
+
+---
+
+### Softmax 的定义与数值稳定形式
+
+对于向量 $x = [x_1, x_2, \dots, x_n]$，softmax 是：
+
+$$
+\text{softmax}(x_i) = \frac{e^{x_i}}{\sum_{j=1}^{n} e^{x_j}}
+$$
+
+为了防止数值溢出，通常使用稳定形式：
+
+$$
+\text{softmax}(x_i) = \frac{e^{x_i - m}}{\sum_j e^{x_j - m}}, \quad \text{其中 } m = \max_j x_j
+$$
+
+---
+
+### 🚧 为什么可以分块更新？
+
+**1. 最大值可以逐步更新**
+
+设：
+
+* 块1的最大值为 $m_1$
+* 块2的最大值为 $m_2$
+
+那么总的最大值就是 $m = \max(m_1, m_2)$
+
+---
+
+**2. 分母 $Z$（归一化项）可以这样更新：**
+
+设：
+
+* 第一块归一化项是：
+
+  $$
+  Z_1 = \sum_{j \in \text{block}_1} e^{x_j - m_1}
+  $$
+* 第二块是：
+
+  $$
+  Z_2 = \sum_{j \in \text{block}_2} e^{x_j - m_2}
+  $$
+
+如果 $m_1 \ne m_2$，则不能直接相加它们，需要转换到共同基准的最大值 $m = \max(m_1, m_2)$，这时有：
+
+$$
+Z = e^{m_1 - m} \cdot Z_1 + e^{m_2 - m} \cdot Z_2
+$$
+
+这就是 **指数的乘法可合并性**：
+
+> $$
+> e^{x - m_1} = e^{x - m} \cdot e^{m - m_1}
+> $$
+
+---
+
+**3. 加权值也可以更新**
+
+类似地，softmax 的输出部分是：
+
+$$
+\sum_j \text{softmax}(x_j) \cdot V_j = \sum_j \frac{e^{x_j - m}}{Z} \cdot V_j
+$$
+
+对于分块更新时，每一块的加权和为：
+
+$$
+\text{weighted}_1 = \sum_{j \in \text{block}_1} e^{x_j - m_1} \cdot V_j
+$$
+
+更新到全局基准 $m = \max(m_1, m_2)$ 下：
+
+$$
+\text{weighted} = e^{m_1 - m} \cdot \text{weighted}_1 + e^{m_2 - m} \cdot \text{weighted}_2
+$$
+
+最终归一化：
+
+$$
+\text{Output} = \frac{\text{weighted}}{Z}
+$$
+
+---
+
+### 🧾 Z\_new 是什么？
+
+* 在每一块中计算 softmax 时，我们记录当前块的最大值 $m_i$，并计算其局部归一化因子 $Z_i$
+* 当下一个块到来时，我们更新全局最大值 $m$，然后使用：
+
+  $$
+  Z_{\text{new}} = e^{m_1 - m} \cdot Z_1 + e^{m_2 - m} \cdot Z_2
+  $$
+* 这一步就是更新归一化因子 $Z$，因此：
+
+> ✅ **Z\_new 就是 softmax 总归一化分母，已考虑所有已处理块并基于最新最大值重新标准化过后的结果**
+
+---
+
+### 🚀 为什么这是优化？
+
+**1. 减少内存使用**
+
+   * 不保存 $QK^\top$
+   * 不保存中间 softmax 值
+   * 避免缓存 logits 和 softmax 整个矩阵
+
+**2. 提升计算效率**
+
+   * 分块计算时，直接执行 fused kernel 完成 score + softmax + weight sum
+   * Cache locality 更好，尤其适合 GPU 上快速寄存器操作
+
+**3. 易于并行化**
+
+   * 每个块可以独立处理，只需合并状态变量（最大值、Z、weighted sum）
+
+---
+
+### ✅ 总结
+
+| 项目     | 原始 Softmax           | FlashAttention（Streaming Softmax） |
+| ------ | -------------------- | --------------------------------- |
+| 最大值    | 一次性计算                | 分块更新（取最大）                         |
+| 分母 Z   | 一次性求和                | 分块转换 + 归一化累加                      |
+| 输出     | 先求所有 softmax 再加权     | 在每块中直接累加 weighted sum             |
+| 内存占用   | 需要存 logits 和 softmax | 只保留当前最大值、Z 和结果                    |
+| 关键数学机制 | softmax 的归一化结构       | 指数运算的乘法拆解能力                       |
+
+
+
+### **Fused kernel（融合内核）**
+
+* 将 `QKᵀ` 的点积、Softmax 和 `@ V` 三个操作 **融合成一个 CUDA 核函数（kernel）**，直接计算最终输出：
+
+  $$
+  \text{Output} = \text{Softmax}(QKᵀ / \sqrt{d}) @ V
+  $$
+
+* 这样可以避免中间变量的显式存储，直接将每个 tile 的结果写入输出张量。
+
+---
+
+### ✅ 优点总结
+
+| 优化目标     | Flash Attention 如何实现       |
+| -------- | -------------------------- |
+| ⬇️ 显存占用  | 不存 `QKᵀ`，不存 `softmax(QKᵀ)` |
+| ⬆️ 计算效率  | Fused kernel 合并多步骤为一步      |
+| 🧠 数值稳定性 | 利用最大值归一化逐块计算 softmax       |
+| 📏 支持长序列 | 显存优化使其支持更长的序列（几千 token）    |
+
+---
+
+### ✅ 对应代码（PyTorch 伪代码）
+
+```python
+# flash-attn 会直接用 fused kernel：
+from flash_attn.flash_attn_interface import flash_attn_unpadded
+
+output = flash_attn_unpadded(q, k, v, dropout_p=0.0, softmax_scale=None, causal=True)
+```
+
+---
+
+### 🧠 总结
+
+> Flash Attention 利用 fused kernel 将 QKᵀ 点积、Softmax、乘 V 融合为一步，避免中间显存开销，提升长序列处理能力，是现代高效 Transformer 架构（如 GPT-NeoX、PaLM、LLaMA）的关键优化组件之一。
+
 
 
 
