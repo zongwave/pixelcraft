@@ -20,8 +20,11 @@
 - 📌 [推理优化（Inference Optimization）]  [👉 阅读](inference_opt/README.md)
   包含模型推理框架构建、静态图优化及系统层面调优。
 
+- 📌 [分布式推理（Distribute）]  [👉 阅读](distribute/README.md)
+  侧重分布式推理、并行机制。
+
 - 📌 [集合通信（CCL）]  [👉 阅读](ccl/README.md)
-  侧重分布式训练、并行机制、通信优化的技术总结。
+  包含集合通信技术的应用总结，包括定制化集合通信接口。
 
 - 📌 [Intel Gaudi 加速器（HPU）]  [👉 阅读](hpu/README.md)
   HPU 硬件架构、算子支持及性能调优总结。
