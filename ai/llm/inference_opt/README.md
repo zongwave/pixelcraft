@@ -1,3 +1,17 @@
+
+# 📑 目录
+
+- 🔧 [一、算子支持完善：补齐 HPU 后端的关键基础算子](#一算子支持完善补齐-hpu-后端的关键基础算子)
+- 📊 [二、推理性能分析：性能 Profiling 定位瓶颈与空洞](#二推理性能分析性能-profiling-定位瓶颈与空洞)
+- 🔒 [三、Tensor 静态化：避免动态 Shape 编译图路径](#三tensor-静态化避免动态-shape-编译图路径)
+- 🤖 [模型结构回顾：LLaMA 推理框架](#模型结构回顾llama-推理框架)
+- 🔥 [四、模块级融合：构建高性能 FusedOp（例如 Attention / MLP）](#四模块级融合构建高性能-fusedop例如-attention--mlp)
+- 📋 [五、构建静态图执行流：实现全图一体化优化](#五构建静态图执行流实现全图一体化优化)
+- 🧮 [六、参数量化优化：从 BF16 动态量化至 Float8](#六参数量化优化从-bf16-动态量化至-float8)
+- 🏁 [总结：优化“六步走”策略总览](#总结优化六步走策略总览)
+
+
+
 # PaddlePaddle 上部署优化 LLaMA 模型至 Gaudi HPU 的技术要点
 
  **目标**：实现高性能、全静态图、全算子部署于 HPU 上的大模型推理（以 LLaMA 为代表），显著减少 Fallback 现象，提升计算利用率。
@@ -44,7 +58,7 @@
 
 为了更清晰理解后续的融合优化策略，我们回顾 LLaMA 解码器的结构：
 
-[![LLaMA 推理结构示意图](diagram/llama_decoder.png)](https://raw.githubusercontent.com/zongwave/notes/main/llm/infra_opt/diagram/llama_decoder.png)
+[![LLaMA 推理结构示意图](diagram/llama_decoder.png)](https://raw.githubusercontent.com/zongwave/pixelcraft/main/ai/llm/infra_opt/diagram/llama_decoder.png)
 
 > *图：LLaMA 解码器结构图，展示 RMSNorm、Self-Attention、MLP 的典型堆叠顺序。*
 

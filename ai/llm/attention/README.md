@@ -43,7 +43,7 @@ $$
 这种机制允许模型从输入序列的所有位置中“挑选”出最重要的信息，并对其进行加权组合。
 
 
-[![Attention QKV](diagram/self-attention_sdpa.jpg)](https://raw.githubusercontent.com/zongwave/pixelcraft/main/ai/llm/hpu/attention/diagram/self-attention_sdpa.jpg)
+[![Attention QKV](diagram/self-attention_sdpa.jpg)](https://raw.githubusercontent.com/zongwave/pixelcraft/main/ai/llm/attention/diagram/self-attention_sdpa.jpg)
 
 ---
 
@@ -420,7 +420,7 @@ $$
 3. 用这个分数加权每个备胎的价值（V）——这决定了他最终会“最关注哪位”。
 
 
-[![Attention QKV](diagram/qkv.png)](https://raw.githubusercontent.com/zongwave/pixelcraft/main/ai/llm/hpu/attention/diagram/qkv.png)
+[![Attention QKV](diagram/qkv.png)](https://raw.githubusercontent.com/zongwave/pixelcraft/main/ai/llm/attention/diagram/qkv.png)
 
 
 ### 为什么要除以 $\sqrt{d_k}$？
