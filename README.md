@@ -24,6 +24,7 @@ PixelCraft 是一个综合性的技术知识库，专注于图像信号处理（
 - [计算机视觉（CV）](cv/README.md)
   - [数字视频稳定 (Digital Video Stabilization)](cv/dvs_gyro.md)
 - [图形学（Graphics）](graphics/README.md)
+  - [三维高斯泼溅 (3D Gaussian Splatting)](graphics/3dgs/README.md)
 - [人工智能（AI）](ai/README.md)
 - [工具和脚本](tools/README.md)
 - [示例和教程](examples/README.md)
