@@ -142,6 +142,67 @@
 
 * **配合静态图**：静态图结构清晰，方便对模型做低精度量化和剪枝，减少模型大小和计算量，进一步提升推理速度。
 
+
+1. **硬件加速器与 FP8 支持**
+
+   * 现代 AI 加速芯片（如 NVIDIA Hopper TransformerEngine、Intel HPU、Habana Gaudi 等）通常对 GEMM（矩阵乘法）提供 **FP8 精度计算**。
+   * 因此，在推理代码中，**与 GEMM 相关的运算可以使用 FP8 算子**，充分利用硬件加速能力，提高性能和吞吐量。
+
+2. **FP8 与高精度计算的结合**
+
+   * 在 Transformer/LLM 中，部分操作（如残差连接、LayerNorm、Softmax 等）对精度敏感。
+   * 这些操作通常保留 **FP16/BF16 计算**，以避免精度损失和误差积累。
+   * 因此 FP8 算子输出在必要时需要 **反量化（dequantize）到 FP16/BF16**，以供后续高精度计算使用。
+
+3. **用户代码与量化参数**
+
+   * 用户无需手动进行量化或反量化，只需向硬件算子提供：
+
+     1. **数据格式类型**（如 FP8 E4M3、E5M2）
+     2. **量化 scale 值**（scale factor）
+   * 量化 scale 一般根据输入 tensor 的数值分布动态计算：
+     [
+     \text{scale} = \frac{\text{amax}}{Q_{\max}}
+     ]
+     其中：
+
+     * **amax**：张量最大绝对值
+     * **Qmax**：FP8 类型的最大可表示有限值（E4M3 ≈ 240，E5M2 ≈ 57344）
+
+4. **量化对象选择**
+
+   * **必须量化**：
+
+     * 所有 GEMM（MatMul）操作，包括 Attention Q/K/V 的计算和 FFN 的线性投影。
+     * 这样可充分利用 FP8 精度带来的性能提升。
+   * **可量化 / 可选择**：
+
+     * 中间激活值，如某些 FFN 中间层输出、Attention 输出等。
+     * 可采用 per-tensor 或 per-channel scale 优化精度。
+   * **不量化 / 高精度保留**：
+
+     * 残差连接（Residual Stream）
+     * LayerNorm、RMSNorm
+     * Softmax/Attention Score
+
+5. **Python 层的透明性**
+
+   * 对上层 Python 使用者来说，量化过程对代码基本透明：
+
+     * 用户只需指定是否启用底层硬件 FP8 加速
+     * 模型加载的权重通常为 **预训练 BF16/FP16** 参数
+     * 硬件自动完成 FP8 量化 → GEMM → 反量化 pipeline
+
+6. **总结**
+
+   * 核心目标是 **在不损失模型精度的前提下，最大化硬件性能**
+   * GEMM 使用 FP8 加速
+   * 高精度操作（残差、Norm、Softmax）保持 FP16/BF16
+   * Scale 动态计算确保小幅值张量不会被压缩塌缩
+   * Python 层无需关心量化细节，只需配置硬件加速参数
+
+
+
 ---
 
 ### 总结
