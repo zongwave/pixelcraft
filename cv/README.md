@@ -10,7 +10,7 @@
 | 文件 | 内容摘要 | 快速访问 |
 |---|---|---|
 | [dvs_gyro.md](./dvs_gyro.md) | 基于 IMU 姿态估计的数字图像稳定（Digital Video Stabilization）算法实现与分析 | [👉 点此阅读](./dvs_gyro.md) |
-
+| [stitching.md](./stitching.md) | 视频拼接算法及应用实现原理 | [👉 点此阅读](./stitching.md) |
 ---
 
 ## 📘 阅读指引
