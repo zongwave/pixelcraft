@@ -31,6 +31,7 @@ PixelCraft 是一个综合性的技术知识库，专注于图像信号处理（
   - [大语言模型推理 (LLM Inference)](ai/llm/README.md)
   - [多模态大模型 (Multimodal Models)](ai/multimodal/README.md)
   - [LoRA 微调 (LoRA Fine-tuning)](ai/lora/README.md)
+  - [具身智能 (Embodied AI)](ai/embodied/README.md)
 - [工具和脚本](tools/README.md)
 - [示例和教程](examples/README.md)
 
