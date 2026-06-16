@@ -34,6 +34,11 @@ PixelCraft 是一个综合性的技术知识库，专注于图像信号处理（
   - [具身智能 (Embodied AI)](ai/embodied/README.md)
 - [工具和脚本](tools/README.md)
 - [示例和教程](examples/README.md)
+- [AI Demo 示例代码](ai/demo/README.md)
+  - [Decoder-Only Transformer](ai/demo/README.md#1-decoder-only-transformer)
+  - [Block Attention](ai/demo/README.md#2-block-attention)
+  - [Mixture of Experts (MoE)](ai/demo/README.md#3-mixture-of-experts-moe)
+  - [数据加载管线 (Data Pipeline)](ai/demo/README.md#5-数据加载管线-data-pipeline)
 
 
 ---

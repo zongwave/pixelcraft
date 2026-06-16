@@ -34,7 +34,14 @@
     - [实验内容](#实验内容)
     - [运行方式](#运行方式-3)
     - [关键发现](#关键发现)
-  - [5. 设计文档](#5-设计文档)
+  - [5. 数据加载管线 (Data Pipeline)](#5-数据加载管线-data-pipeline)
+    - [概述](#概述-3)
+    - [文件](#文件-4)
+    - [代码组件](#代码组件-3)
+    - [运行方式](#运行方式-4)
+    - [演示内容](#演示内容-3)
+    - [参考文档](#参考文档-2)
+  - [6. 设计文档](#6-设计文档)
   - [环境要求](#环境要求)
   - [与完整文档的对应关系](#与完整文档的对应关系)
 
@@ -199,11 +206,60 @@ python moe_experiment.py
 
 ---
 
-## 5. 设计文档
+## 5. 数据加载管线 (Data Pipeline)
+
+### 概述
+
+聚焦训练数据加载的**效率**与**鲁棒性**，不涉及图像处理。以 COCO val2017 为数据源，展示数据完整性校验、样本分析、样本权重、缓存策略、Prefetch 和异常处理。
+
+### 文件
 
 | 文件 | 说明 |
 |------|------|
+| `data_pipeline_demo.py` | 数据加载管线完整实现（7 个步骤） |
+| `data_pipeline_summary.md` | 技术总结文档 |
+
+### 代码组件
+
+| 组件 | 说明 |
+|------|------|
+| `validate_dataset()` | 数据完整性校验（损坏图片、异常标注、数据缺失） |
+| `analyze_annotations()` | 多维度样本分析（类别分布、尺寸、每图物体数、宽高比、位置热力图） |
+| `compute_sample_weights()` | 样本权重计算（类别逆频率 + 尺寸权重 + 组合权重） |
+| `CocoDataset` | COCO 数据集封装，支持样本权重 |
+| `LRUCache` | 线程安全的 LRU 缓存 |
+| `CachedDataLoader` | 带缓存的 DataLoader 封装 |
+
+### 运行方式
+
+```bash
+python data_pipeline_demo.py
+```
+
+### 演示内容
+
+1. **数据完整性校验** — 检测损坏图片、异常 bbox、数据缺失
+2. **样本分析** — 5 维度统计（类别、尺寸、密度、宽高比、位置）
+3. **样本权重** — 3 种策略（类别逆频率、尺寸、组合）
+4. **加载策略对比** — 无缓存 vs LRU 缓存（多 epoch 场景）
+5. **Prefetch 展示** — 多 worker 后台预加载
+6. **异常处理** — 损坏跳过、标注修复、错误隔离
+7. **数据质量报告** — 汇总统计
+
+### 参考文档
+
+- `data_pipeline_summary.md` — 技术总结（含 3 大瓶颈框架和关键工程发现）
+
+---
+
+## 6. 设计文档
+
+| 文件 | 说明 |
+|------|------|
+| `decoder_only_summary.md` | Decoder-Only Transformer 设计技术原理与实现总结 |
+| `block_attention_summary.md` | Block Attention 设计技术原理与实现总结 |
 | `moe_demo_design.md` | MoE Demo 设计与实现总结（含 v1/v2 对比、实验数据、分布混叠分析） |
+| `data_pipeline_summary.md` | 数据加载管线技术总结 |
 | `vibe_coding_journal.md` | Vibe Coding 实践记录 |
 
 ---
