@@ -102,4 +102,5 @@ Gr00tPolicy.get_action()
 | 扩散 Action Head | `Isaac-GR00T/gr00t/model/action_head/` |
 | 冻结 Backbone | `Isaac-GR00T/gr00t/model/backbone/` |
 | VLA 部署管线 | `tao/vla_infer/` |
+| 输入几何契约（预处理一致性） | `Isaac-GR00T/gr00t/data/transform/video.py`（尺寸闸门 `check_input`）、`gr00t/model/backbone/eagle2_hg_model/preprocessor_config.json`（不 resize / 不 pad） |
 | NPU/LPU 加速 | `Isaac-GR00T/gr00t/transformers_npu/`、`groot_ops/` |

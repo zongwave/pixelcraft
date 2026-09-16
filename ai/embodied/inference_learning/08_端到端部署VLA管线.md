@@ -96,7 +96,16 @@ flowchart LR
 2. **动作 horizon**：一次 `get_action` 输出未来多步动作；client 可滑动执行（每帧消费一步，不足再请求），
    从而容忍网络/推理延迟（"预测-执行"滚动模式，类似 receding horizon）。
 3. **时间戳对齐**：返回 `ref_timestamp`/`loc_timestamp`，用于同步观测与动作、以及记录/回放数据。
-4. **`torch.compile` 加速**（run_server.py）：
+4. **图像预处理契约：最容易翻车的一环**（真实事故复盘见第 02 章 §7）——
+   client 发来的图必须是**训练时那一种画面**，而不只是"尺寸对得上"：
+   - 服务端只解码、**不做任何几何修复**：N1.5 的 transform 链只有 `VideoToTensor`+`VideoToNumpy`，
+     Eagle 处理器又是 `do_resize=false / do_pad=false`，喂进去歪的，模型就按歪的学。
+   - 所以 **letterbox（等比缩放 + 居中补黑边）应当由服务端保证**，且与训练路径等价；
+     **禁止非等比拉伸**——它能让 `check_input`、token 数、序列长度全部与训练一致，**全程不报任何错**，
+     却把画面纵向拉长 1.6 倍，真机上表现为定位偏移、动作块互相矛盾、末态失稳。
+   - 建议两道闸并列：① 尺寸闸门（现有 `VideoToTensor.check_input`）；② **黑边不变量检查**
+     （训练帧首/末各 ~15% 行应接近纯黑）。第二条才抓得住"尺寸全绿但几何错了"这一类 bug。
+5. **`torch.compile` 加速**（run_server.py）：
    ```python
    model.policy.model.action_head.model.forward = torch.compile(..., mode="max-autotune")
    model.policy.model.backbone.model.forward   = torch.compile(..., mode="reduce-overhead")
@@ -113,7 +122,8 @@ flowchart LR
 
 - vla_infer 是"从机器人到模型再到机器人"的完整闭环：client 采数据 → server 解码+推理 → 动作回送执行。
 - GR00T_N1_5 的 `ModelVLA` 直接复用 `Gr00tPolicy`，只做数据适配（state 切片、key 映射）。
-- 工程要点：并发图像解码、线程池推理、horizon 滚动执行、时间戳对齐、`torch.compile` 加速。
+- 工程要点：并发图像解码、线程池推理、horizon 滚动执行、时间戳对齐、`torch.compile` 加速，
+  以及**与训练一致的图像几何**（第 02 章 §7：尺寸检查通过 ≠ 几何一致，非等比拉伸会静默毁掉真机表现）。
 
 ## 自己动手
 
