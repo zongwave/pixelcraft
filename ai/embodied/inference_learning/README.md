@@ -7,7 +7,14 @@
 
 - 需要 Python、PyTorch(torch.Tensor / nn.Module / autocast) 基础。
 - 需要基础深度学习常识：Transformer、注意力、扩散模型/流匹配（flow matching）概念。
-- 需要能在本工作区翻阅代码：`Isaac-GR00T/`、`groot_ops/`、`vllm_evas/`、`tao/vla_infer/`。
+- 需要能在本工作区翻阅代码：`Isaac-GR00T/`、`groot_ops/`、`tao/vla_infer/`。
+
+## 课程基准版本（重要约定）
+
+> 本课程始终以 **GR00T-N1.5**（`Isaac-GR00T/` 当前 `groot_ops_patch_n15` 代码线，`gr00t_n1_5`、
+> `action_horizon=16`）为基准展开。社区已有 **N1.6**（`Gr00tN1d6`、`action_horizon=50`，
+> HF `nvidia/GR00T-N1.6-3B` 与 ModelScope `nv-community/GR00T-N1.6-3B` 内容逐位一致），
+> 但其结构与本仓库 N1.5 加载/patch 链路不兼容，**仅作资料留存，不进入课程主线**。
 
 ## 课程主线（我们回答什么问题）
 
@@ -32,6 +39,12 @@ Gr00tPolicy.get_action()
 1. 按章号顺序阅读（`00` → `10`），每章都在真实代码里打开对应文件对照。
 2. 每章末尾有一个 **"自己动手"** 小节（阅读提示 / 小练习），建议先尝试再往下。
 3. 遇到疑问可以在 `## 疑问与批注` 小节记录，方便后续回顾与向老师提问。
+4. 学完主线后可读 `11_扩充参考_NVIDIA_G1端到端部署教程精读.md`——NVIDIA 官方
+   《End-to-End Physical AI With the Unitree G1》(GR00T **N1.7**) 全 25 页精读笔记，
+   含原文引用链接与"N1.7 机制 ↔ 本课程章节"映射表。**它属 N1.7 生态的扩充参考，
+   不改变本课程的 N1.5 教学基准**（见上方"课程基准版本"约定）。
+5. `12_GR00T版本演进_N1.5_N1.6_N1.7原理.md`——GR00T 三代版本（N1.5/N1.6/N1.7）演进逻辑
+   专题：架构/数据/动作空间/部署四条主线的逐代对照，数字均对过官方一手资料与本地权重 config。
 
 ## 教学理念：案例 → 原理 → 迁移（本课程对具身智能的普适意义）
 
@@ -89,4 +102,4 @@ Gr00tPolicy.get_action()
 | 扩散 Action Head | `Isaac-GR00T/gr00t/model/action_head/` |
 | 冻结 Backbone | `Isaac-GR00T/gr00t/model/backbone/` |
 | VLA 部署管线 | `tao/vla_infer/` |
-| NPU/LPU 加速 | `vllm_evas/`、`Isaac-GR00T/gr00t/transformers_npu/`、`groot_ops/` |
+| NPU/LPU 加速 | `Isaac-GR00T/gr00t/transformers_npu/`、`groot_ops/` |
