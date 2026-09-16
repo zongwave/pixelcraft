@@ -17,6 +17,21 @@
 
 ## 2. 关键机制：运行期"补丁替换"（transformers_npu/patch.py, register.py）
 
+```mermaid
+flowchart TB
+  subgraph 启动前["from_pretrained 之前（打补丁窗口）"]
+    PM["PatchesManager.apply_patches()"] --> REG["运行期替换注册表:<br/>Qwen3RMSNorm→NPU_RMSNorm(整类)<br/>DecoderLayer.forward→wrapper(方法)"]
+  end
+  subgraph 实例化后
+    M["GR00T_N1_5 实例"] --> B1["backbone 子模块 = NPU 版<br/>(SigLIP/Qwen3/Eagle桥接 mlp1)"]
+    M --> A1["action_head = NPU 版<br/>(含整条 get_action wrapper)"]
+    M --> P1["prepare_input wrapper<br/>state 尽早搬 LPU 与 backbone 重叠"]
+  end
+  REG -.-> B1 & A1 & P1
+```
+*图：自绘——"不动 gr00t/HF 一行源码"的原理：在类被实例化**之前**把符号表里的类/方法换掉，之后 `from_pretrained` 构造出来的天然是 NPU 版子模块*
+
+
 核心难点：**不动 gr00t 与 HF 源码**，就能让模型用 NPU 算子。做法是"实例化之前打补丁"：
 
 ```

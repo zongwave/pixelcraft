@@ -68,6 +68,22 @@ def denoising_steps(self) -> int:
 
 ## 6. 完整 get_action（串联前两章）
 
+```mermaid
+flowchart TD
+  O["observations (dict, 物理单位)"] --> U{"已 batch 化?"}
+  U -- 否 --> S["unsqueeze + np.array 化"]
+  U -- 是 --> T
+  S --> T["② apply_transforms<br/>归一化+旋转表示 (第02章)"]
+  T --> M["③ model.get_action<br/>backbone + DiT 去噪 (第04–06章)<br/>用 model 的 action_horizon / 服务侧 denoising_steps"]
+  M --> D["④ unapply_transforms<br/>反归一化(逆序)"]
+  D --> R{"输入曾补 batch?"}
+  R -- 是 --> SQ["squeeze"]
+  R -- 否 --> A["action dict 返回"]
+  SQ --> A
+```
+*图：`Gr00tPolicy.get_action` 主链路——三个"接缝"（②③④）恰好各是一章的主题；①⑤ 是容易被忽略的 batch 对称处理*
+
+
 ```python
 def get_action(self, observations):
     obs_copy = observations.copy()

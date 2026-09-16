@@ -58,6 +58,18 @@ class ModelVLA:
 
 ## 3. 服务端并发管线（server/core/vla_server.py）
 
+```mermaid
+flowchart LR
+  Z["ZMQServer 收包"] --> Q1["图像解码队列"]
+  Q1 --> TP1["解码线程池<br/>并行 cv2.imdecode<br/>(压缩帧→矩阵)"]
+  TP1 --> Q2["obs 队列"]
+  Q2 --> TP2["推理线程池<br/>ModelVLA.infer<br/>(第02–06章链路)"]
+  TP2 --> OUT["pred_action + 时间戳<br/>回送客户端"]
+  TP2 -.统计.-> ST["request_count / avg_inference_time<br/>(rich 监控面板)"]
+```
+*图：自绘——服务端的三级流水：收包 → 并行解码 → 并发推理；两条线程池各自消化"图像解码"与"模型计算"两种不同瓶颈*
+
+
 - 用 `ZMQServer` 收客户端推来的观测；`VLAServer` 负责编排。
 - **图像解码线程池**：相机视频帧以**压缩编码**在网络上传输，服务端用线程池**并行 `cv2.imdecode`** 解码，
   避免单线程成为瓶颈。

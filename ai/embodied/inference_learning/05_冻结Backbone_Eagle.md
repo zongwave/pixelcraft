@@ -6,6 +6,10 @@
 
 ## 1. 为什么需要"看懂世界"的 backbone
 
+![Eagle grounding 示例](images/ch12/grounding_example1.png)
+*图：N1.5 的 Eagle VLM 具备"指称表达→像素区域"的 grounding 能力（GR-1 场景 IoU 40.4，优于同级 Qwen2.5-VL-3B）——这正是"冻结它、借它看懂世界"的底气。原文：<https://research.nvidia.com/labs/gear/gr00t-n1_5/>*
+
+
 动作不能凭空生成——机器人必须**先理解**"看到了什么、被要求做什么"。这部分"理解"能力
 由一个大 VLM 提供：`Eagle 2.5`（视觉-语言模型）。
 - 它把多张视频帧 + 一段语言指令，变成一串**语义特征** `backbone_features`。
