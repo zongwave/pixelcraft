@@ -68,10 +68,12 @@ def stretch(img, target_h, target_w):
 
 
 def distort(img, target_h, target_w, k):
-    """形变系数扫描：k=1.0 等比(A 契约)，k=1.6 完全横向压扁(B 事故)。
+    """形变系数扫描：k=1.0 等比补边(A 契约)，k=native_ar(=1.6) 等价于非等比拉伸(B 事故)。
 
-    实现：先把内容横向压缩 1/k 再补到目标尺寸 -> 等效宽高比 = native_ar / k^(k->1 插值)。
-    取 k 为"横向压缩倍数"，k=1 时与 A 逐像素一致，k=ar(native)/1 时与 B 一致。
+    实现：先把内容横向压缩 1/k，再按 A 的方式补边 + 缩放到目标尺寸。
+    实测等价性（episode_000000 首帧）：k=1.0 与 A 逐像素 MSE=0.0；
+    k=1.6 与 B_stretch 的逐像素 MSE=78（只差重采样顺序），而 B 与 A 相差 13546
+    ⇒ 扫描的两个端点确实就是 A 和 B，中间点是"部分拉伸"。
     """
     import cv2
 
@@ -491,7 +493,6 @@ def main():
                 errs = [float(((infer(0, img, args.seed + 101 * i)["action"] - gtv) ** 2).mean())
                         for i in range(args.sweep_seeds)]
                 gt_m = float(np.mean(errs))
-                fl = float(np.nan)
                 pix = float(((img.astype(np.float32) - ref.astype(np.float32)) ** 2).mean())
                 if base_err is None:
                     base_err = np.asarray(errs)
