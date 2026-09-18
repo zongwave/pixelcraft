@@ -707,7 +707,7 @@ RealSense 连接已被系统枚举；Thor 与 G1 网口在同一预期网段；�
 | 部署形态 | PyTorch 推理服务（HTTP/ORB） | 同左 | **LEAPP 分段 ONNX bundle** + Triton/ONNX Runtime（Isaac ROS 栈） |
 
 注意：本课程 README 已约定**课程永久锁定 N1.5 教学基准**；N1.6 权重仅作资料留存
-（本地下载中：`/home/ft/wzong/models/GR00T-N1.6-3B` 与 `-modelscope` 两份，两源字节一致）。
+（本地两份均已完成：`/home/ft/wzong/models/GR00T-N1.6-3B`（HF 源）与 `-modelscope`（ModelScope 源），2026-09-18 复核 4 个 shard 的 SHA256 两两相同，且与 HF `.cache/…/*.metadata` 里的 LFS `sha256` 一致）。
 
 > 更新：本表的版本事实已在后续专题文档中逐项对过一手资料并订正细化
 > （如 N1.6 checkpoint `action_horizon=50`/代码默认 16、N1.7 DiT 减回 16 层等），
