@@ -1,0 +1,96 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1560" height="1210" viewBox="0 0 1560 1210" font-family="Helvetica, Arial, 'Noto Sans CJK SC', 'WenQuanYi Zen Hei', sans-serif">
+<defs><marker id="arr" markerWidth="10" markerHeight="10" refX="7" refY="3" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L8,3 L0,6 Z" fill="#555"/></marker><marker id="arrRed" markerWidth="10" markerHeight="10" refX="7" refY="3" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L8,3 L0,6 Z" fill="#c0392b"/></marker><marker id="arrGreen" markerWidth="10" markerHeight="10" refX="7" refY="3" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L8,3 L0,6 Z" fill="#1e8449"/></marker></defs>
+<rect x="0" y="0" width="1560" height="1210" rx="8" fill="#fafafa" stroke="none" stroke-width="1.6"/>
+<text x="780.0" y="42" font-size="24" font-weight="bold" fill="#222" text-anchor="middle">gr00t e2e infer Pipeline：原生 PyTorch 逐算子  vs  E200 NPU 融合算子（最终交付）</text>
+<text x="780.0" y="68" font-size="13" font-weight="normal" fill="#666" text-anchor="middle">单 Die · 数值来源：groot_ops CHANGELOG v0.1/v0.2 与 Redmine #162 板端实测（L20 交叉机 golden 比对）</text>
+<rect x="30" y="95" width="730" height="1080" rx="12" fill="#fdecea" stroke="#e6b0aa" stroke-width="2"/>
+<text x="395.0" y="127" font-size="18" font-weight="bold" fill="#c0392b" text-anchor="middle">原生 PyTorch 逐算子（未融合 / NPU 接入基线）</text>
+<rect x="55" y="147" width="680" height="41" rx="8" fill="#fff" stroke="#aaa8" stroke-width="1.6"/>
+<text x="395.0" y="176" font-size="12" font-weight="normal" fill="#333" text-anchor="middle">输入：图像 ×N + 文本 + 本体 state</text>
+<line x1="395.0" y1="188" x2="395.0" y2="204" stroke="#555" stroke-width="1.8" marker-end="url(#arr)"/>
+<rect x="55" y="206" width="680" height="76" rx="8" fill="#f5f5f5" stroke="#999" stroke-width="1.6"/>
+<text x="395.0" y="233" font-size="13" font-weight="bold" fill="#333" text-anchor="middle">Backbone（eagle2.5 VL）· SigLIP</text>
+<text x="395.0" y="253" font-size="12" font-weight="normal" fill="#444" text-anchor="middle">SigLIP 视觉：conv2d patch_embed + L×[ 3×linear(QKV) → softmax(QKᵀ+mask)V</text>
+<text x="395.0" y="270" font-size="12" font-weight="normal" fill="#444" text-anchor="middle">→ out proj → LN → fc1/GELU/fc2 ]　—— 全 aten 逐算子，穿插 permute/contiguous</text>
+<line x1="395.0" y1="282" x2="395.0" y2="296" stroke="#555" stroke-width="1.8" marker-end="url(#arr)"/>
+<rect x="55" y="298" width="680" height="58" rx="8" fill="#f5f5f5" stroke="#999" stroke-width="1.6"/>
+<text x="395.0" y="327" font-size="12" font-weight="normal" fill="#444" text-anchor="middle">Qwen3 语言：L×[ rmsnorm → qkv+RoPE → attention → o_proj → rmsnorm → SwiGLU ]</text>
+<text x="395.0" y="344" font-size="12" font-weight="normal" fill="#444" text-anchor="middle">每层 attention/linear/norm/mlp 各自独立发射</text>
+<rect x="55" y="366" width="680" height="41" rx="8" fill="#fff" stroke="#aaa8" stroke-width="1.6"/>
+<text x="395.0" y="395" font-size="12" font-weight="normal" fill="#333" text-anchor="middle">vl_embs（视觉+语言 embedding）· 每轮 H2D 上载</text>
+<line x1="395.0" y1="410" x2="395.0" y2="420" stroke="#555" stroke-width="1.8" marker-end="url(#arr)"/>
+<rect x="50" y="424" width="690" height="470" rx="10" fill="#fdf3e7" stroke="#e59866" stroke-width="1.8"/>
+<text x="395.0" y="450" font-size="15" font-weight="bold" fill="#b9770e" text-anchor="middle">Action Head（DiT flow-matching · get_action）</text>
+<rect x="75" y="464" width="500" height="58" rx="8" fill="#fadbd8" stroke="#e74c3c" stroke-width="1.6"/>
+<text x="325.0" y="493" font-size="12" font-weight="normal" fill="#7b241c" text-anchor="middle">initial noise = torch.randn</text>
+<text x="325.0" y="510" font-size="12" font-weight="normal" fill="#7b241c" text-anchor="middle">CPU 生成 + H2D（同步阻塞设备）</text>
+<line x1="335.0" y1="522" x2="335.0" y2="536" stroke="#555" stroke-width="1.8" marker-end="url(#arr)"/>
+<rect x="585" y="464" width="140" height="58" rx="8" fill="#fff" stroke="#c0392b" stroke-width="1.6"/>
+<text x="655.0" y="493" font-size="12" font-weight="normal" fill="#c0392b" text-anchor="middle">权重 H2D</text>
+<text x="655.0" y="510" font-size="12" font-weight="normal" fill="#c0392b" text-anchor="middle">~1.65 GB/轮</text>
+<line x1="655" y1="522" x2="655" y2="884" stroke="#c0392b" stroke-width="1.8" stroke-dasharray="6,5" marker-end="url(#arrRed)"/>
+<rect x="75" y="540" width="500" height="75" rx="8" fill="#fadbd8" stroke="#e74c3c" stroke-width="1.6"/>
+<text x="325.0" y="569" font-size="12" font-weight="normal" fill="#7b241c" text-anchor="middle">4×Euler × 16 DiT 层（每步过一遍）：</text>
+<text x="325.0" y="586" font-size="12" font-weight="normal" fill="#7b241c" text-anchor="middle">adaLN → 3×linear(QKV) → attention → project_out</text>
+<text x="325.0" y="603" font-size="12" font-weight="normal" fill="#7b241c" text-anchor="middle">adaLN → fc1 → GELU → fc2　(逐算子 + 布局重排)</text>
+<line x1="335.0" y1="615" x2="335.0" y2="629" stroke="#555" stroke-width="1.8" marker-end="url(#arr)"/>
+<rect x="75" y="633" width="500" height="41" rx="8" fill="#f5f5f5" stroke="#999" stroke-width="1.6"/>
+<text x="325.0" y="662" font-size="12" font-weight="normal" fill="#444" text-anchor="middle">actions += dt · pred_velocity（mul+add 各一次发射）</text>
+<rect x="70" y="688" width="650" height="74" rx="8" fill="#fff" stroke="#c0392b" stroke-width="1.6"/>
+<text x="395.0" y="710" font-size="13" font-weight="bold" fill="#c0392b" text-anchor="middle">aten 胶水：copy_ 5554 次/轮 · contiguous 432.8ms · permute/reshape/clone 频发</text>
+<text x="395.0" y="734" font-size="13" font-weight="normal" fill="#943126" text-anchor="middle">to_head_major_k 963 次/轮 · evMemcpy 605 次（99% 来自接入层）</text>
+<line x1="335.0" y1="766" x2="335.0" y2="780" stroke="#555" stroke-width="1.8" marker-end="url(#arr)"/>
+<rect x="75" y="778" width="500" height="41" rx="8" fill="#eaf0fa" stroke="#8da9d8" stroke-width="1.6"/>
+<text x="325.0" y="807" font-size="12" font-weight="normal" fill="#333" text-anchor="middle">action_pred</text>
+<rect x="55" y="1010" width="680" height="130" rx="8" fill="#fff" stroke="#c0392b" stroke-width="1.6"/>
+<text x="75" y="1035" font-size="14" font-weight="bold" fill="#c0392b" text-anchor="start">指标（step1 稳态，单 Die）</text>
+<text x="75" y="1060" font-size="13" font-weight="normal" fill="#641e16" text-anchor="start">e2e ≈ 0.826 s/轮　·　device busy ≈ 13%（host/H2D bound，设备大量闲置）</text>
+<text x="75" y="1085" font-size="13" font-weight="normal" fill="#641e16" text-anchor="start">权重每轮 H2D 上载 + CPU randn H2D + 大量 aten reshape/clone/transpose/cat</text>
+<text x="75" y="1110" font-size="13" font-weight="normal" fill="#641e16" text-anchor="start">golden 比对 cos ≈ 0.99338（L20 原生 PyTorch 为参考基准）</text>
+<rect x="800" y="95" width="730" height="1080" rx="12" fill="#eafaf1" stroke="#a9dfbf" stroke-width="2"/>
+<text x="1165.0" y="127" font-size="18" font-weight="bold" fill="#1e8449" text-anchor="middle">E200 NPU 融合算子 + 权重设备驻留（v0.1 → v0.2 最终交付）</text>
+<rect x="825" y="147" width="680" height="41" rx="8" fill="#fff" stroke="#aaa8" stroke-width="1.6"/>
+<text x="1165.0" y="176" font-size="12" font-weight="normal" fill="#333" text-anchor="middle">输入：图像 ×N + 文本 + 本体 state</text>
+<line x1="1165.0" y1="188" x2="1165.0" y2="204" stroke="#555" stroke-width="1.8" marker-end="url(#arr)"/>
+<rect x="825" y="206" width="680" height="76" rx="8" fill="#d5f5e3" stroke="#27ae60" stroke-width="1.6"/>
+<text x="1165.0" y="233" font-size="13" font-weight="bold" fill="#145a32" text-anchor="middle">Backbone（eagle2.5 VL）· SigLIP</text>
+<text x="1165.0" y="253" font-size="12" font-weight="normal" fill="#444" text-anchor="middle">SigLIP：conv2d_patch_embed（加载期权重转置 12ms→2ms）+ unified_mha + mlp_gelu</text>
+<text x="1165.0" y="270" font-size="12" font-weight="normal" fill="#444" text-anchor="middle">跨图 cross-image host-FFI 整层编排（kernel clone/transpose 消除）</text>
+<line x1="1165.0" y1="282" x2="1165.0" y2="296" stroke="#555" stroke-width="1.8" marker-end="url(#arr)"/>
+<rect x="825" y="298" width="680" height="58" rx="8" fill="#d5f5e3" stroke="#27ae60" stroke-width="1.6"/>
+<text x="1165.0" y="327" font-size="12" font-weight="normal" fill="#145a32" text-anchor="middle">Qwen3：gemm_norm_rope + qwen3_attention + mlp_swiglu（整层 FFI，发射次数大幅下降）</text>
+<text x="1165.0" y="344" font-size="12" font-weight="normal" fill="#145a32" text-anchor="middle">（v0.2：胶水 aten 未收 → view 缓存，794→504 次）</text>
+<rect x="825" y="366" width="680" height="41" rx="8" fill="#fff" stroke="#aaa8" stroke-width="1.6"/>
+<text x="1165.0" y="395" font-size="12" font-weight="normal" fill="#333" text-anchor="middle">vl_embs · 设备驻留（免每轮 H2D）</text>
+<line x1="1165.0" y1="410" x2="1165.0" y2="420" stroke="#555" stroke-width="1.8" marker-end="url(#arr)"/>
+<rect x="820" y="424" width="690" height="470" rx="10" fill="#f4fdf6" stroke="#82c99b" stroke-width="1.8"/>
+<text x="1165.0" y="450" font-size="15" font-weight="bold" fill="#1e8449" text-anchor="middle">Action Head（DiT flow-matching · get_action）</text>
+<rect x="845" y="464" width="500" height="58" rx="8" fill="#d5f5e3" stroke="#27ae60" stroke-width="1.6"/>
+<text x="1095.0" y="493" font-size="12" font-weight="normal" fill="#145a32" text-anchor="middle">initial noise：设备侧 randn_normal（#161）</text>
+<text x="1095.0" y="510" font-size="12" font-weight="normal" fill="#145a32" text-anchor="middle">免 CPU randn + 同步 H2D</text>
+<line x1="1105.0" y1="522" x2="1105.0" y2="536" stroke="#555" stroke-width="1.8" marker-end="url(#arr)"/>
+<rect x="1355" y="464" width="140" height="58" rx="8" fill="#fff" stroke="#1e8449" stroke-width="1.6"/>
+<text x="1425.0" y="493" font-size="12" font-weight="normal" fill="#1e8449" text-anchor="middle">权重设备驻留</text>
+<text x="1425.0" y="510" font-size="12" font-weight="normal" fill="#1e8449" text-anchor="middle">H2D ≈ 0（稳态）</text>
+<line x1="1425" y1="522" x2="1425" y2="884" stroke="#1e8449" stroke-width="1.8" stroke-dasharray="6,5" marker-end="url(#arrGreen)"/>
+<rect x="845" y="540" width="500" height="75" rx="8" fill="#d5f5e3" stroke="#27ae60" stroke-width="1.6"/>
+<text x="1095.0" y="569" font-size="12" font-weight="normal" fill="#145a32" text-anchor="middle">4×Euler × 16 DiT 层 · 每层 3 个大融合：</text>
+<text x="1095.0" y="586" font-size="12" font-weight="normal" fill="#145a32" text-anchor="middle">adaln_qkv（norm+QKV）+ fused_mha_out（attn+o_proj）</text>
+<text x="1095.0" y="603" font-size="12" font-weight="normal" fill="#145a32" text-anchor="middle">+ mlp_gelu_norm（norm+FFN+gelu）</text>
+<line x1="1105.0" y1="615" x2="1105.0" y2="629" stroke="#555" stroke-width="1.8" marker-end="url(#arr)"/>
+<rect x="845" y="633" width="500" height="58" rx="8" fill="#d5f5e3" stroke="#27ae60" stroke-width="1.6"/>
+<text x="1095.0" y="662" font-size="12" font-weight="normal" fill="#145a32" text-anchor="middle">头 dit_action_head（2 次发射，tau 折入 bias，消 cat/swish）</text>
+<text x="1095.0" y="679" font-size="12" font-weight="normal" fill="#145a32" text-anchor="middle">尾 dit_action_tail（1 次发射，含 Euler：macc scale-add）</text>
+<rect x="840" y="705" width="650" height="74" rx="8" fill="#fff" stroke="#1e8449" stroke-width="1.6"/>
+<text x="1165.0" y="727" font-size="13" font-weight="bold" fill="#1e8449" text-anchor="middle">效果：contiguous −88% · permute −93% · to_head_major_k 963 → 0</text>
+<text x="1165.0" y="751" font-size="13" font-weight="normal" fill="#145a32" text-anchor="middle">布局直出（head-major QKV / token-major K,O）消除跨算子数据搬运</text>
+<line x1="1105.0" y1="783" x2="1105.0" y2="797" stroke="#555" stroke-width="1.8" marker-end="url(#arr)"/>
+<rect x="845" y="795" width="500" height="41" rx="8" fill="#eaf0fa" stroke="#8da9d8" stroke-width="1.6"/>
+<text x="1095.0" y="824" font-size="12" font-weight="normal" fill="#333" text-anchor="middle">action_pred</text>
+<rect x="825" y="1010" width="680" height="130" rx="8" fill="#fff" stroke="#1e8449" stroke-width="1.6"/>
+<text x="845" y="1035" font-size="14" font-weight="bold" fill="#1e8449" text-anchor="start">指标（step1 稳态，单 Die）</text>
+<text x="845" y="1060" font-size="13" font-weight="normal" fill="#145a32" text-anchor="start">e2e 0.826 → 0.697（v0.1）→ 0.14 s 稳态（−83%，5.9×）　·　device busy 51%（87/171ms）</text>
+<text x="845" y="1085" font-size="13" font-weight="normal" fill="#145a32" text-anchor="start">融合算子主导：adaln_qkv / fused_mha_out / mlp_gelu_norm / mlp_swiglu / dit_action_head|tail</text>
+<text x="845" y="1110" font-size="13" font-weight="normal" fill="#145a32" text-anchor="start">golden 比对 cos 0.99999+（n1.6 达 0.9999999，逐位一致验证）</text>
+<text x="780.0" y="1195" font-size="12" font-weight="normal" fill="#888" text-anchor="middle">参考：Redmine #162/#170 · groot_ops CHANGELOG v0.1/v0.2 · Isaac-GR00T docs/performance/gr00t_npu_*.md</text>
+</svg>

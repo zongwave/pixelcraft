@@ -81,7 +81,22 @@ action_encoder, sinusoidal_pe, timestep_encoder, embedding, proj_out, ...
   甚至 `get_action` 的整条去噪循环被包装成更高效的版本，并对 `prepare_input` 做"state 前移 + 与 backbone 重叠"。
 - 好处：**模型结构、训练/推理接口、数据流（第 01-08 章）完全不变**，只换"底下的算子实现"。
 
-## 5. vllm_evas：把 vLLM 接到 E200
+## 5. 实测对比：原生 PyTorch pipeline vs NPU 融合算子 pipeline
+
+![gr00t e2e 原生 PyTorch vs NPU 融合算子 pipeline 对比](images/ch09/npu_pipeline_native_vs_fused.svg)
+
+上图左列为 gr00t n1.5 e2e 推理的原生 PyTorch 逐算子 pipeline（H20 单卡 profile 口径），
+右列为经 `transformers_npu` 补丁 + `groot_ops` 融合算子改写后的 pipeline：
+
+- **端到端**：单步推理 0.826s → v0.1 0.697s → v0.2 0.14s（**−83%，约 5.9×**）；
+- **设备利用率**：device busy 13% → 51%——融合消掉了大量小算子启动与访存往返，瓶颈从"调度空隙"回到计算本身；
+- **数据搬运**：H2D 1.65GB 基本不变（IO 未变），但算子间 `contiguous/permute` 类拷贝核减少 88–93%（`to_head_major_k` 963 次 → 0）；
+- **精度**：融合路径输出与原生 golden 余弦相似度 ≥ 0.99999。
+
+> 口径说明：单 Die E200、e2e infer（1 步去噪 × batch 1）；v0.1/v0.2 指标来自 groot_ops CHANGELOG 与Redmine #162 的 profile 记录，
+> 图为示意重绘，算子分组做了归并。
+
+## 6. vllm_evas：把 vLLM 接到 E200
 
 `vllm_evas` 是 vLLM 的**平台集成包**（非 vLLM 本体）：
 - `platform.py`：实现 `vllm.platforms.Platform`（设备初始化、能力查询）。
@@ -90,7 +105,7 @@ action_encoder, sinusoidal_pe, timestep_encoder, embedding, proj_out, ...
 - 它把 vLLM 本来跑在 CUDA 上的 LLM **服务**接到 E200 上；内核级别的算子来自 `groot_ops`。
   （主要用于通用 LLM/GPT 服务；GR00T 自身的 VLA 推理主要走 transformers_npu。）
 
-## 6. 三者的分工一句话总结
+## 7. 三者的分工一句话总结
 
 | 组件 | 作用 | 让什么跑在 NPU |
 |---|---|---|
@@ -101,7 +116,7 @@ action_encoder, sinusoidal_pe, timestep_encoder, embedding, proj_out, ...
 **加速的本质**：保持上层接口/数据流不变，用"模块补丁 + 融合算子"把算力压到自研 NPU 上，
 从而在真实机器人上满足实时推理需求。
 
-## 7. 本章小结
+## 8. 本章小结
 
 - 加速在算子/模块/框架三层进行，核心是**运行期打补丁**（`PatchesManager`），不改模型源码。
 - `groot_ops` 提供融合算子（rmsnorm/mlp/mha/dit_block…），`transformers_npu` 把它们接到 GR00T。
