@@ -1,0 +1,165 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1180" height="1290" viewBox="0 0 1180 1290" font-family="'PingFang SC','Microsoft YaHei','Noto Sans CJK SC',sans-serif">
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#444"/>
+    </marker>
+    <marker id="arrB" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#1f6feb"/>
+    </marker>
+    <marker id="arrG" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#2e7d32"/>
+    </marker>
+  </defs>
+  <rect width="1180" height="1290" fill="#fafaf7"/>
+  <text x="590" y="34" text-anchor="middle" font-size="21" font-weight="bold" fill="#222">gr00t N1.6 NPU patching 结构框架（transformers_npu，tag n16-v0.1 实测代码）</text>
+  <text x="590" y="56" text-anchor="middle" font-size="13" fill="#666">蓝=安装期（import 时一次性） · 灰=运行期数据流 · 绿=算子/硬件层 · 虚线=回滚/校验</text>
+
+  <!-- ======== Layer A: business model (untouched) ======== -->
+  <rect x="40" y="76" width="1100" height="120" rx="10" fill="#eef3fa" stroke="#9db8d9" stroke-width="1.5"/>
+  <text x="60" y="102" font-size="15" font-weight="bold" fill="#1f4e79">业务模型层 —— gr00t 原生代码零侵入（上游 release ead5283，一行不改）</text>
+  <rect x="70" y="116" width="240" height="62" rx="6" fill="#fff" stroke="#9db8d9"/>
+  <text x="190" y="141" text-anchor="middle" font-size="13" fill="#333">Gr00tN1d6（VLA 模型）</text>
+  <text x="190" y="161" text-anchor="middle" font-size="11.5" fill="#777">prepare_input / ActionHead</text>
+  <rect x="330" y="116" width="250" height="62" rx="6" fill="#fff" stroke="#9db8d9"/>
+  <text x="455" y="141" text-anchor="middle" font-size="13" fill="#333">EagleBackbone 视觉塔</text>
+  <text x="455" y="161" text-anchor="middle" font-size="11.5" fill="#777">SigLIP2 视觉 + Eagle-2.5 LLM(Qwen3)</text>
+  <rect x="600" y="116" width="250" height="62" rx="6" fill="#fff" stroke="#9db8d9"/>
+  <text x="725" y="141" text-anchor="middle" font-size="13" fill="#333">DiT 扩散动作头</text>
+  <text x="725" y="161" text-anchor="middle" font-size="11.5" fill="#777">TimestepEncoder·AdaLN·blocks·Euler</text>
+  <rect x="870" y="116" width="240" height="62" rx="6" fill="#fff" stroke="#9db8d9"/>
+  <text x="990" y="141" text-anchor="middle" font-size="13" fill="#333">第三方库模块</text>
+  <text x="990" y="161" text-anchor="middle" font-size="11.5" fill="#777">transformers.Qwen3× · diffusers.Attn×</text>
+
+  <!-- install() flow box -->
+  <rect x="40" y="226" width="1100" height="150" rx="10" fill="#f3eefe" stroke="#b79ade" stroke-width="1.5"/>
+  <text x="60" y="252" font-size="15" font-weight="bold" fill="#5b2d9e">安装期入口 —— gr00t/transformers_npu/__init__.py（import 时在模型加载之前执行一次，幂等）</text>
+  <rect x="60" y="268" width="172" height="58" rx="6" fill="#fff" stroke="#b79ade"/>
+  <text x="146" y="290" text-anchor="middle" font-size="12" fill="#333">① _verify_runtime</text>
+  <text x="146" y="308" text-anchor="middle" font-size="11" fill="#777">版本契约 4.51.3/0.30.2</text>
+  <rect x="246" y="268" width="172" height="58" rx="6" fill="#fff" stroke="#b79ade"/>
+  <text x="332" y="290" text-anchor="middle" font-size="12" fill="#333">② backend.init_lpu</text>
+  <text x="332" y="308" text-anchor="middle" font-size="11" fill="#777">torch_lpu·双 Die 亲和</text>
+  <rect x="432" y="268" width="172" height="58" rx="6" fill="#fff" stroke="#b79ade"/>
+  <text x="518" y="290" text-anchor="middle" font-size="12" fill="#333">③ register_all()</text>
+  <text x="518" y="308" text-anchor="middle" font-size="11" fill="#777">登记全部 patch 目标</text>
+  <rect x="618" y="268" width="172" height="58" rx="6" fill="#fff" stroke="#b79ade"/>
+  <text x="704" y="290" text-anchor="middle" font-size="12" fill="#333">④ apply_patches()</text>
+  <text x="704" y="308" text-anchor="middle" font-size="11" fill="#777">写回 sys.modules 属性</text>
+  <rect x="804" y="268" width="160" height="58" rx="6" fill="#fff" stroke="#b79ade"/>
+  <text x="884" y="290" text-anchor="middle" font-size="12" fill="#333">⑤ _verify_bindings</text>
+  <text x="884" y="308" text-anchor="middle" font-size="11" fill="#777">逐目标 is 校验 fail-fast</text>
+  <rect x="978" y="268" width="144" height="58" rx="6" fill="#fff" stroke="#b79ade"/>
+  <text x="1050" y="290" text-anchor="middle" font-size="12" fill="#333">⑥ prof.auto_report</text>
+  <text x="1050" y="308" text-anchor="middle" font-size="11" fill="#777">GROOT_NPU_PROF 门控</text>
+  <line x1="232" y1="297" x2="246" y2="297" stroke="#5b2d9e" stroke-width="1.5" marker-end="url(#arr)"/>
+  <line x1="418" y1="297" x2="432" y2="297" stroke="#5b2d9e" stroke-width="1.5" marker-end="url(#arr)"/>
+  <line x1="604" y1="297" x2="618" y2="297" stroke="#5b2d9e" stroke-width="1.5" marker-end="url(#arr)"/>
+  <line x1="790" y1="297" x2="804" y2="297" stroke="#5b2d9e" stroke-width="1.5" marker-end="url(#arr)"/>
+  <line x1="964" y1="297" x2="978" y2="297" stroke="#5b2d9e" stroke-width="1.5" marker-end="url(#arr)"/>
+  <text x="60" y="352" font-size="12" fill="#5b2d9e">入口二：hijack_policy_load() 把 Gr00tPolicy._load_model 包一层自动 install()；运行前可显式 warmup(model) 预热 temb/PE 常驻缓存（幂等、fail-fast）</text>
+  <text x="60" y="370" font-size="12" fill="#5b2d9e">回滚：remove_patches() 逐 Patch 还原原对象 —— 补丁可拔插，便于 A/B 与调试</text>
+
+  <!-- arrow A->B -->
+  <line x1="590" y1="196" x2="590" y2="226" stroke="#1f6feb" stroke-width="2" marker-end="url(#arrB)"/>
+  <text x="602" y="216" font-size="12" fill="#1f6feb">patch 改写（整类替换 / 方法 wrapper 链）——模型代码不感知</text>
+
+  <!-- ======== Layer B: register table ======== -->
+  <rect x="40" y="406" width="1100" height="200" rx="10" fill="#fdf6e3" stroke="#d9b36c" stroke-width="1.5"/>
+  <text x="60" y="432" font-size="15" font-weight="bold" fill="#8a5a00">登记表 —— register.py：25 个 patch 目标，三个 NPU 分组 + CPU/NPU 通用兼容组（register_patch("模块路径.属性", NPU实现)）</text>
+  <rect x="60" y="446" width="330" height="118" rx="6" fill="#fff" stroke="#d9b36c"/>
+  <text x="225" y="466" text-anchor="middle" font-size="13" font-weight="bold" fill="#8a5a00">① Qwen3 文本塔（transformers）</text>
+  <text x="225" y="486" text-anchor="middle" font-size="11" fill="#444">Qwen3RMSNorm / MLP / Attention → 整类替换</text>
+  <text x="225" y="503" text-anchor="middle" font-size="11" fill="#444">DecoderLayer.forward · Model.__init__ ·</text>
+  <text x="225" y="520" text-anchor="middle" font-size="11" fill="#444">ForCausalLM.forward → wrapper 包裹</text>
+  <text x="225" y="546" text-anchor="middle" font-size="11" fill="#999">→ npu/qwen3.py · npu/attention.py</text>
+  <rect x="410" y="446" width="330" height="118" rx="6" fill="#fff" stroke="#d9b36c"/>
+  <text x="575" y="466" text-anchor="middle" font-size="13" font-weight="bold" fill="#8a5a00">② DiT / 动作头（gr00t.model.modules）</text>
+  <text x="575" y="486" text-anchor="middle" font-size="11" fill="#444">TimestepEncoder · AdaLayerNorm · BasicTransformerBlock</text>
+  <text x="575" y="503" text-anchor="middle" font-size="11" fill="#444">DiT/AlternateVLDiT/SelfAttentionTransformer.forward</text>
+  <text x="575" y="520" text-anchor="middle" font-size="11" fill="#444">SinusoidalPE · CategorySpecificLinear/MLP · ActionEncoder</text>
+  <text x="575" y="546" text-anchor="middle" font-size="11" fill="#999">→ npu/action.py · npu/attention.py</text>
+  <rect x="760" y="446" width="360" height="118" rx="6" fill="#fff" stroke="#d9b36c"/>
+  <text x="940" y="466" text-anchor="middle" font-size="13" font-weight="bold" fill="#8a5a00">③ 其余（diffusers + gr00t 顶层 + 兼容）</text>
+  <text x="940" y="486" text-anchor="middle" font-size="11" fill="#444">AttnProcessor/2_0.__call__ · FeedForward.forward</text>
+  <text x="940" y="503" text-anchor="middle" font-size="11" fill="#444">Gr00tN1d6.prepare_input · ActionHead.__init__ /</text>
+  <text x="940" y="520" text-anchor="middle" font-size="11" fill="#444">get_action_with_features（O1 融合）· EagleBackbone.__init__</text>
+  <text x="940" y="546" text-anchor="middle" font-size="11" fill="#999">→ npu/eagle.py · npu/siglip2.py</text>
+  <text x="60" y="588" font-size="12" fill="#8a5a00">Patch 对象记录 orig_module/orig_cls/orig_method_name + final_patch_func（多层 wrapper 组合后的最终可调用）—— remove_patches() 依此还原；</text>
+  <text x="60" y="604" font-size="12" fill="#8a5a00">apply 时区分「整类替换」与「方法替换」两种解析路径，装后由 _verify_patch_bindings() 表驱动逐条核验 is-同一性。</text>
+
+  <line x1="590" y1="606" x2="590" y2="640" stroke="#444" stroke-width="2" marker-end="url(#arr)"/>
+  <text x="602" y="628" font-size="12" fill="#444">运行期：from_pretrained 实例化的各计算叶子直接构建为 NPU 类 / 走 wrapper 链</text>
+
+  <!-- ======== Layer C: npu leaves ======== -->
+  <rect x="40" y="640" width="1100" height="196" rx="10" fill="#eaf4ec" stroke="#7fb98a" stroke-width="1.5"/>
+  <text x="60" y="666" font-size="15" font-weight="bold" fill="#1e5b2a">NPU 叶子实现层 —— npu/：把「逐 op torch 计算」换成「torch_evo 融合算子 + 常驻缓存」</text>
+  <g font-size="11.5" fill="#333">
+    <rect x="60" y="680" width="196" height="74" rx="6" fill="#fff" stroke="#7fb98a"/>
+    <text x="158" y="702" text-anchor="middle" font-weight="bold">qwen3.py</text>
+    <text x="158" y="720" text-anchor="middle">QKV/O 融合 · RoPE 常驻</text>
+    <text x="158" y="737" text-anchor="middle">FFI 整层 · 权重 LPU 常驻</text>
+    <rect x="268" y="680" width="196" height="74" rx="6" fill="#fff" stroke="#7fb98a"/>
+    <text x="366" y="702" text-anchor="middle" font-weight="bold">action.py</text>
+    <text x="366" y="720" text-anchor="middle">DiT 头尾融合 · Euler 尾</text>
+    <text x="366" y="737" text-anchor="middle">temb/ss/PE 常驻 · NPULinear</text>
+    <rect x="476" y="680" width="196" height="74" rx="6" fill="#fff" stroke="#7fb98a"/>
+    <text x="574" y="702" text-anchor="middle" font-weight="bold">attention.py</text>
+    <text x="574" y="720" text-anchor="middle">unified_mha 单/双 Die</text>
+    <text x="574" y="737" text-anchor="middle">K token-major · 补行布局</text>
+    <rect x="684" y="680" width="196" height="74" rx="6" fill="#fff" stroke="#7fb98a"/>
+    <text x="782" y="702" text-anchor="middle" font-weight="bold">eagle.py · siglip2.py</text>
+    <text x="782" y="720" text-anchor="middle">视觉融合链 · 整层 host-FFI</text>
+    <text x="782" y="737" text-anchor="middle">conv2d_patch_embed · LN/MLP</text>
+    <rect x="892" y="680" width="228" height="74" rx="6" fill="#fff" stroke="#7fb98a"/>
+    <text x="1006" y="702" text-anchor="middle" font-weight="bold">_attn_layout.py</text>
+    <text x="1006" y="720" text-anchor="middle">head-major/QKV 布局几何</text>
+    <text x="1006" y="737" text-anchor="middle">纯函数 · CPU 可自测</text>
+  </g>
+  <rect x="60" y="768" width="1060" height="52" rx="6" fill="#fff" stroke="#c2c2c2"/>
+  <text x="590" y="790" text-anchor="middle" font-size="12.5" fill="#333">公共基建：npu/_config.py（env 开关收敛 NAME_* 常量 · GROOT_NPU_DEBUG 统一诊断） · _cache.py（KeyedCache 常驻缓存统一模式） · _logging.py（统一 logger）</text>
+  <text x="590" y="810" text-anchor="middle" font-size="12" fill="#888">纪律：每叶子持有一个 _caches 命名空间类；热路径只读常驻张量，禁止逐 step h2d/d2h 冗余搬移</text>
+
+  <line x1="590" y1="836" x2="590" y2="868" stroke="#2e7d32" stroke-width="2" marker-end="url(#arrG)"/>
+  <text x="602" y="858" font-size="12" fill="#2e7d32">融合算子调用（一次 FFI 顶几十次 aten）</text>
+
+  <!-- ======== Layer D: ops glue ======== -->
+  <rect x="40" y="868" width="1100" height="120" rx="10" fill="#e8f1f8" stroke="#6fa8c9" stroke-width="1.5"/>
+  <text x="60" y="894" font-size="15" font-weight="bold" fill="#175a7d">设备胶水层 —— ops/：布局约定 + 单算子封装（@op 名与 kernel 侧对齐，供 profiler 归组）</text>
+  <rect x="60" y="906" width="420" height="66" rx="6" fill="#fff" stroke="#6fa8c9"/>
+  <text x="270" y="928" text-anchor="middle" font-size="12.5" font-weight="bold">evo_lpu.py（布局胶水 + 逐算子封装）</text>
+  <text x="270" y="947" text-anchor="middle" font-size="11" fill="#555">alloc/rep_/to_lpu · gemm_bias · layernorm_buf · adaln</text>
+  <text x="270" y="963" text-anchor="middle" font-size="11" fill="#555">mlp_gelu/silu/relu · mlp_gelu_norm · dit_action_head/tail · euler_tail</text>
+  <rect x="500" y="906" width="300" height="66" rx="6" fill="#fff" stroke="#6fa8c9"/>
+  <text x="650" y="928" text-anchor="middle" font-size="12.5" font-weight="bold">backend.py</text>
+  <text x="650" y="947" text-anchor="middle" font-size="11" fill="#555">init_lpu · device 串 · 单/双 Die 判定</text>
+  <text x="650" y="963" text-anchor="middle" font-size="11" fill="#555">to_lpu 上传（split/复刻统一入口）</text>
+  <rect x="820" y="906" width="300" height="66" rx="6" fill="#fff" stroke="#6fa8c9"/>
+  <text x="970" y="928" text-anchor="middle" font-size="12.5" font-weight="bold">profiler.py</text>
+  <text x="970" y="947" text-anchor="middle" font-size="11" fill="#555">@op 装饰器逐算子计时 · sync 口径</text>
+  <text x="970" y="963" text-anchor="middle" font-size="11" fill="#555">GROOT_NPU_PROF[_SYNC/_SHAPE] 门控</text>
+
+  <line x1="590" y1="988" x2="590" y2="1020" stroke="#2e7d32" stroke-width="2" marker-end="url(#arrG)"/>
+
+  <!-- ======== Layer E: torch_evo + hardware ======== -->
+  <rect x="40" y="1020" width="1100" height="120" rx="10" fill="#e6f2ea" stroke="#2e7d32" stroke-width="1.5"/>
+  <text x="60" y="1046" font-size="15" font-weight="bold" fill="#1e5b2a">算子库与硬件层（独立仓库 groot_ops → torch_evo wheel）</text>
+  <rect x="60" y="1058" width="340" height="66" rx="6" fill="#fff" stroke="#2e7d32"/>
+  <text x="230" y="1080" text-anchor="middle" font-size="12.5" font-weight="bold">torch_evo（FFI 绑定，自动生成）</text>
+  <text x="230" y="1099" text-anchor="middle" font-size="11" fill="#555">*_ffi.cc + *_host.cpp 编排 · dtype 0/1/2</text>
+  <text x="230" y="1115" text-anchor="middle" font-size="11" fill="#555">torch_ffi_common.h 公共壳（wzong 独建）</text>
+  <rect x="420" y="1058" width="340" height="66" rx="6" fill="#fff" stroke="#2e7d32"/>
+  <text x="590" y="1080" text-anchor="middle" font-size="12.5" font-weight="bold">LPU kernel（ops/torch_ops/*.ac）</text>
+  <text x="590" y="1099" text-anchor="middle" font-size="11" fill="#555">19 个融合算子目录 + 单算子 · 双 Die M/N-split</text>
+  <text x="590" y="1115" text-anchor="middle" font-size="11" fill="#555">fp16/bf16/fp32 · golden/bit-exact 单测三套</text>
+  <rect x="780" y="1058" width="340" height="66" rx="6" fill="#fff" stroke="#2e7d32"/>
+  <text x="950" y="1080" text-anchor="middle" font-size="12.5" font-weight="bold">E200 / A1000 NPU（torch_lpu backend）</text>
+  <text x="950" y="1099" text-anchor="middle" font-size="11" fill="#555">LPU_DEVICE_ID / EVAS_DEVICE_ID 定位</text>
+  <text x="950" y="1115" text-anchor="middle" font-size="11" fill="#555">双 Die 亲和 + VISA macc / LPU 常驻 DDR</text>
+
+  <!-- side box: validation -->
+  <rect x="40" y="1168" width="1100" height="96" rx="10" fill="#f5f5f5" stroke="#bbb" stroke-dasharray="6 4"/>
+  <text x="60" y="1194" font-size="14" font-weight="bold" fill="#555">验证闭环（不属于 patch 本体，但与框架强耦合）</text>
+  <text x="60" y="1218" font-size="12" fill="#555">· tests/gr00t/test_npu_e2e_golden.py：离线 numpy cos≥0.999（CI 可跑）+ 板端 board 用例（env 门控 LPU_DEVICE_ID——父进程零 LPU 接触，避免与子进程抢 E100）</text>
+  <text x="60" y="1238" font-size="12" fill="#555">· deployment_scripts/npu/sd_e2e_3cam.py：3-cam 真实输入 e2e，产出 n16_pred.npz 与 CPU golden 对比；run_npu.sh 注入板端环境</text>
+  <text x="60" y="1258" font-size="12" fill="#555">· profiler @op 统计 + steady_median 稳态口径（n1.6 实测 ~0.14–0.2 s/轮）</text>
+</svg>

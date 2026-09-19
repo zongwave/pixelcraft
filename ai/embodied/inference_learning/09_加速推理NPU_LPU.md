@@ -58,6 +58,42 @@ PatchesManager.register_patch(Q+"Qwen3DecoderLayer.forward", qwen3_decoder_layer
 从而连 `flow_matching_action_head.SinusoidalPositionalEncoding` 这种"别处 from-import 的绑定"也能换到。
 这套基建让补丁覆盖面广且可 `remove_patches()` 回滚。
 
+### n1.6 实际结构：transformers_npu 包全景（对照 tag n16-v0.1 实测代码）
+
+上面是 n1.5 视角。到 n1.6，同一套机制收拢成自洽的独立包 `gr00t/transformers_npu/`，并强调
+**零侵入**：gr00t 原生文件恢复为上游 release `ead5283`，全部集成改动迁入 patch 层。整体是
+"五层纵向栈 + 旁路验证闭环"：
+
+![n1.6 NPU patching 结构框架（tag n16-v0.1 实测代码）](images/ch09/npu_patch_framework.svg)
+*图：自绘——对照 n16-v0.1 实测代码逐文件核对：install() 六步流水线、25 个登记目标、npu 叶子、
+ops 胶水、torch_evo/LPU。与第 13 章对照：L20 上的 N1.6 实测走的是**未打补丁的原生 GPU 链**
+（install() 不执行）；这张图的五层栈是 E200 板端运行 N1.6 时的完整形态。*
+
+逐层读图（与代码对照）：
+
+1. **安装入口**（`__init__.py`，幂等）：`install()` 六步——①版本契约断言
+   （`transformers==4.51.3`/`diffusers==0.30.2`，**以板端实测组合为准**，与 pyproject pin
+   不一致时以实测为契约）；②`init_lpu` 双 Die 初始化；③`register_all()`；④`apply_patches()`；
+   ⑤`_verify_patch_bindings()` 表驱动逐目标核验"该位置当前值 **is** 替换对象"，缺漏当场
+   fail-fast——防止"只打上一般补丁、悄悄走 eager 慢路径"；⑥profiler 自动报告。
+   另有第二入口 `hijack_policy_load()`（把 `Gr00tPolicy._load_model` 包一层自动 install）；
+   权重就位后可显式 `warmup(model)` 预填 temb/PE 常驻缓存，首轮 `get_action` 即命中热路径。
+2. **登记表**（`register.py`）：25 个目标 = Qwen3 文本塔 6 + 动作头相关 17（DiT/embodiment 模块，
+   含 diffusers 的 AttnProcessor×2 与 FeedForward，以及 `Gr00tN1d6.prepare_input` state 前移）
+   + **兼容组 2**（`register_model_compat`：EagleBackbone 构建 + 确定性噪声，CPU/NPU 通用——
+   生成 CPU golden 时**只应用这一组**、不碰 LPU，这是三代对照能同机共存的基础）。
+   每个 `Patch` 对象记住原绑定，`remove_patches()` 整体拔除回滚。
+3. **npu 叶子**（`npu/`）：真正的计算替换实现。统一纪律——每叶子一个 `_caches` 命名空间类、
+   热路径只读常驻张量、env 开关集中走 `_config.NAME_*`（诊断统一 `GROOT_NPU_DEBUG`）。
+4. **ops 胶水**（`ops/`）：`evo_lpu.py` 把布局约定（head-major、双 Die split、fp16/bf16/fp32）
+   封装成 `@op` 命名的逐算子调用；`profiler.py` 按同一 `@op` 名归组计时——所以 profiler
+   报表与算子名天然对齐，定位慢点不用猜。
+5. **算子库/硬件**：`torch_evo`（groot_ops 仓产出的 wheel）→ `.ac` kernel → E200 双 Die。
+   第 3 节的 19 个融合算子目录都在这一层，patch 层不重复实现任何 kernel。
+
+debugging 提示：e2e trace 里若模块名仍是**原类名**（逐 op 现算链复活，约 +30ms/轮 host 开销），
+说明某叶子绑定没生效——先看安装期两个 fail-fast 是否被绕过，再用 `remove_patches()` 回滚做 A/B。
+
 ## 3. 底层算子从哪来：groot_ops（torch_evo / 融合算子）
 
 `groot_ops/ops/torch_ops/` 里是自研算子库，很多直接对应 GR00T 的动作头/Transformer 子块：
