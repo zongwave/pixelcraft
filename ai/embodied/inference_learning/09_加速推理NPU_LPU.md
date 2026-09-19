@@ -1,8 +1,8 @@
-# 09 · 加速推理：把 GR00T 搬上 NPU/LPU（transformers_npu / groot_ops / vllm_evas）
+# 09 · 加速推理：把 GR00T 搬上 NPU/LPU（transformers_npu / groot_ops）
 
 > 目标：理解"推理变快"的底层手段——如何把 GR00T 的重型模块（Qwen3 文本、SigLIP 视觉、DiT 动作头）
 > 在**不重写整个模型**的前提下，替换成在自研 NPU(E200）上运行的融合算子。
-> 对应代码：`Isaac-GR00T/gr00t/transformers_npu/`、`groot_ops/`、`vllm_evas/`
+> 对应代码：`Isaac-GR00T/gr00t/transformers_npu/`、`groot_ops/`
 
 ## 1. 为什么需要加速 / 加速在哪一层
 
@@ -13,7 +13,6 @@
      减少 kernel 启动开销、减少访存。→ `groot_ops`（自研内核，groot_ops 里就是这些算子）。
   2. **模块层**：把 transformer 里"这几个算子组成的子块"整体替换成跑在 NPU 上的版本。
      → `transformers_npu`（运行期补丁）。
-  3. **框架层**：把整个 VLLM/LLM 服务接到 NPU 上跑。→ `vllm_evas`。
 
 ## 2. 关键机制：运行期"补丁替换"（transformers_npu/patch.py, register.py）
 
@@ -96,31 +95,22 @@ action_encoder, sinusoidal_pe, timestep_encoder, embedding, proj_out, ...
 > 口径说明：单 Die E200、e2e infer（1 步去噪 × batch 1）；v0.1/v0.2 指标来自 groot_ops CHANGELOG 与Redmine #162 的 profile 记录，
 > 图为示意重绘，算子分组做了归并。
 
-## 6. vllm_evas：把 vLLM 接到 E200
-
-`vllm_evas` 是 vLLM 的**平台集成包**（非 vLLM 本体）：
-- `platform.py`：实现 `vllm.platforms.Platform`（设备初始化、能力查询）。
-- `ops/` + `registry.py`：注册 EVAS 自定义 torch op。
-- `attention/`, `compilation/`, `distributed/`, `worker/`……：对应 vLLM 各模块的 EVAS 侧实现。
-- 它把 vLLM 本来跑在 CUDA 上的 LLM **服务**接到 E200 上；内核级别的算子来自 `groot_ops`。
-  （主要用于通用 LLM/GPT 服务；GR00T 自身的 VLA 推理主要走 transformers_npu。）
-
-## 7. 三者的分工一句话总结
+## 6. 两者的分工一句话总结
 
 | 组件 | 作用 | 让什么跑在 NPU |
 |---|---|---|
 | `groot_ops` | 自研融合算子库(内核+host+FFI) | 单个计算块 |
 | `transformers_npu` | 运行期补丁，把 GR00T 子模块换成 NPU 版 | 整个 GR00T(VLA 推理) |
-| `vllm_evas` | vLLM 平台集成(Platform+op 注册) | vLLM/LLM 服务 |
+
+> 注：实际部署未引入 vllm_evas；"权重预导入/设备驻留"的做法仅在方案调研时参考过 vllm_evas 的相关概念。
 
 **加速的本质**：保持上层接口/数据流不变，用"模块补丁 + 融合算子"把算力压到自研 NPU 上，
 从而在真实机器人上满足实时推理需求。
 
-## 8. 本章小结
+## 7. 本章小结
 
-- 加速在算子/模块/框架三层进行，核心是**运行期打补丁**（`PatchesManager`），不改模型源码。
+- 加速在算子/模块两层进行，核心是**运行期打补丁**（`PatchesManager`），不改模型源码。
 - `groot_ops` 提供融合算子（rmsnorm/mlp/mha/dit_block…），`transformers_npu` 把它们接到 GR00T。
-- `vllm_evas` 负责 vLLM 在 E200 平台的整体集成。
 - 对读者：理解"补丁替换 + 融合算子"即可，无需逐行读 `.ac` 内核。
 
 ## 自己动手
