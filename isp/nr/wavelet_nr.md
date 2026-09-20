@@ -1,3 +1,5 @@
+**中文 | [English](./wavelet_nr.en.md)**
+
 # libxcam Wavelet Denoise 技术总结
 
 ## 目录

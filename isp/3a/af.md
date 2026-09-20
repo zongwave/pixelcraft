@@ -1,3 +1,5 @@
+**中文 | [English](./af.en.md)**
+
 # Auto Focus (AF) 技术总结
 
 ## 目录

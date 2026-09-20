@@ -1,3 +1,5 @@
+**中文 | [English](./awb.en.md)**
+
 # Auto White Balance (AWB) 技术总结
 
 ## 目录

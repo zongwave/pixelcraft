@@ -11,17 +11,19 @@
   ISP • CV • 3D • AI
 ```
 
+<p align="center"><b>中文</b> · <a href="./README.en.md">English</a></p>
+
 [![PixelCraft](tools/PixelCraft.gif)](https://github.com/zongwave/pixelcraft/blob/main/tools/PixelCraft.gif)
 
 PixelCraft 是一个综合性的技术知识库，专注于图像信号处理（ISP）、计算机视觉（CV）、图形学（Graphics）以及人工智能（AI）领域的技术总结和资源分享。我们的目标是为开发者、研究人员和爱好者提供一个丰富的资源平台，以促进技术交流和创新。
 
 ## 目录
 
-- [图像信号处理 (ISP）](isp/README.md)
+- [图像信号处理 (ISP）](isp/README.md) · [English](isp/README.en.md)
   - [3A (AE/AWB/AF)](isp/3a/README.md)
   - [图像降噪 (Noise Reduction)](isp/nr/README.md)
   - [图像质量调优 (IQ Tunning)](isp/iq/README.md)
-- [计算机视觉（CV）](cv/README.md)
+- [计算机视觉（CV）](cv/README.md) · [English](cv/README.en.md)
   - [数字视频稳定 (Digital Video Stabilization)](cv/dvs_gyro.md)
 - [图形学（Graphics）](graphics/README.md)
   - [三维高斯泼溅 (3D Gaussian Splatting)](graphics/3dgs/README.md)

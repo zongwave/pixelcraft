@@ -1,20 +1,18 @@
-**中文 | [English](./stitching.en.md)**
-
+**English | [中文](./stitching.md)**
 # libxcam Video Stitching
 
 ---
 
-## 360 Stitching algorithum integration in application
+## 360 Stitching Algorithm Integration in Application
 
 ### 8K 360 Stitching
 
  [![8K 360 Stitching](diagram/xcam_360_video_stitching_3_cams.png)](https://github.com/zongwave/pixelcraft/blob/master/cv/diagram/xcam_360_video_stitching_3_cams.png)
 
 
-### Surround View for automotive
+### Surround View for Automotive
 
- [![8K 360 Stitching](diagram/xcam_360_video_stitching_2_cams.png)](https://github.com/zongwave/pixelcraft/blob/master/cv/diagram/xcam_360_video_stitching_3_cams.png)
-.png
+ [![Surround View Stitching](diagram/xcam_360_video_stitching_2_cams.png)](https://github.com/zongwave/pixelcraft/blob/master/cv/diagram/xcam_360_video_stitching_2_cams.png)
 
 
 
@@ -138,7 +136,7 @@ This file provides the C-style API for initializing, configuring, and executing 
 ---
 
 **Summary:**  
-These APIs allow external (C or C++) applications to create, configure, and run the 360 stitching pipeline in libxcam, handling buffer conversion and resource management internally. They provide a simple and unified interface for integrating 360 stitching into
+These APIs allow external (C or C++) applications to create, configure, and run the 360 stitching pipeline in libxcam, handling buffer conversion and resource management internally. They provide a simple and unified interface for integrating 360 stitching into external applications.
 
 ---
 

@@ -1,3 +1,5 @@
+**中文 | [English](./3d_nr.en.md)**
+
 # libxcam 3D 降噪技术总结
 
 ## 目录

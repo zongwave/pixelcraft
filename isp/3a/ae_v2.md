@@ -1,3 +1,5 @@
+**中文 | [English](./ae_v2.en.md)**
+
 # 自动曝光(Auto Exposure, AE) 技术总结
 
 ## 目录
