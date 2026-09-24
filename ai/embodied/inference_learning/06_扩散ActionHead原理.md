@@ -327,9 +327,9 @@ K+V × 8 层 ≈ **30 GFLOP/去噪步**；K=4 就是 ~119 GFLOP，缓存后只�
 | 权重常驻设备 | ✔ | `NPULinear._w` / `._lpu()`（`action.py:96-131`） |
 | 缓冲常驻 | ✔ | `_ditbufs`，按形状 key 复用（`action.py:754-770`） |
 | 输入零拷贝复用 | ✔（单 Die 下 `_to_ln_input` 对已是 LPU-fp16 的 `vl_embs` 直接返回视图） | `action.py:79-90`、`evo_lpu.py:267-268` |
-| **`to_k/to_v` 投影提升到循环外** | ✘ **未做** | `action.py:743` 每次把 encoder 喂进 kernel、`:746-747` 只取权重、`:752` `kv_from_nh1=0`、`:773` `dit_block_fused(...)`；kernel 侧 `dit_block_ffi.cc:145-146` 实参 = `encoder + wt_k + wt_v → out_k/out_v`，**无 precompute/skip 开关** |
+| **`to_k/to_v` 投影提升到循环外** | ✘ v0.2 tag **未做** →（**2026-09-24 已在板端 v0.2-fix 线落地**，见本节末「落地实况」）| `action.py:743` 每次把 encoder 喂进 kernel、`:746-747` 只取权重、`:752` `kv_from_nh1=0`、`:773` `dit_block_fused(...)`；kernel 侧 `dit_block_ffi.cc:145-146` 实参 = `encoder + wt_k + wt_v → out_k/out_v`，**无 precompute/skip 开关** |
 
-净账：一次 `get_action` = 4 步 × 8 cross 层 × 2 投影 = **64 次 K/V 投影，其中 48 次是白算**。
+净账：一次 `get_action` = 4 步 × 8 cross 层 × 2 投影 = **64 次 K/V 投影，其中 48 次是白算**（落地后变成 **8 次计算 + 24 次复用**，见「落地实况」）。
 
 **有意思的旁证——同一族优化，他们做了另外两处，恰好绕开了观测侧：**
 
@@ -345,9 +345,9 @@ K+V × 8 层 ≈ **30 GFLOP/去噪步**；K=4 就是 ~119 GFLOP，缓存后只�
 ⚠ 但**省不到 launch 数**：K/V gemm 早已折进"每 block 一次 FFI"，所以收益记在 device 时间与权重带宽两栏。
 而该部署的历史瓶颈画像（`to_lpu` 6148ms、`page_kv` 1691ms、每去噪步 ~0.53s）说明它的头号货币曾是
 **host 往返而非 FLOPs**——这解释了为什么 v0.2 的优先级给了 `unified_mha` 消 `page_kv`，
-本条属"正确但非当期瓶颈"。**性能优化的排序也是数据流分析的一部分。**
+本条属"正确但非当期瓶颈"。**性能优化的排序也是数据流分析的一部分。**（这段当时是**推断**，2026-09-24 已被实测坐实，见下。）
 
-**要落地，三个必踩的坑（对账见第 09 章 §7，实现至今未落地）**：
+**要落地，三个必踩的坑（对账见第 09 章 §7；2026-09-24 已在板端 v0.2-fix 线落地，见下）**：
 
 1. **布局**：kernel 约定 `out_k=[M_kv,N_k]`、`out_v=[N_q,M_kv]`（`dit_block_ffi.cc:214-219`）——
    **V 是转置布局**，预计算必须产出同布局，否则 `QK^T` 静默错位（§6.5 那种"MSE 只偏高一点"的安静错误）；
@@ -358,12 +358,110 @@ K+V × 8 层 ≈ **30 GFLOP/去噪步**；K=4 就是 ~119 GFLOP，缓存后只�
    与 §6.5 是同一种事故**）。缓存 key 至少含 `vl_embs` 的 `data_ptr + shape + dtype`，
    并用现成 golden 门（`deployment_scripts/npu/cos_check.py`，口径 0.99999）做 A/B。
 
-**后续（2026-09-24）**：上面三条坑已在**第 09 章 §7** 逐条按到 v0.2 kernel 实参表上对账
-（8 条第 06 章结论 7 条印证，唯本条未落地）。对账时新增一条**本节没有预见的副作用**：
-v0.2 把整个 DiT block 收成一次 `torch_evo.dit_block_fused`（`action.py:773`）之后，
-这笔 K/V 白算被**吞进 FFI 内部**，不再出现在 profiler 的顶层算子表里——
-**从"可见的慢"变成"隐形的慢"**。推论：优化被"融合"吞掉之后，可观测性也要跟着下沉一层
-（看 `GROOT_NPU_DIT_BLOCK_FUSED=0` 的 A/B 差值，而不是看顶层算子名）。
+> **落地实况（2026-09-24 · 板端 `10.9.11.86`，分支 `tmp_v02fix_ffi_guard` / `tmp_v02fix_merge`，尚未提交）**
+>
+> kernel `ops/torch_ops/adaln_qkv/adaln_qkv_kernel.ac` **+12/−4**（`adaln_qkv_run_die` 与
+> `adaln_qkv_scaleshift_run_die` 各一处）、host `gr00t/transformers_npu/npu/action.py` **+32**
+> （新开关 `GROOT_NPU_DIT_KV_CACHE`，默认开）。核心就是一个**第三态**：
+>
+> ```c
+> if (kv_from_nh1 != 2) {        // 2 = 交叉注意力 K/V 已预计算常驻，跳过投影
+>   aq_linear_qkv_die(out_k, kv_in, wt_k, bias_k, ...);
+>   aq_linear_qkv_die(out_v, kv_in, wt_v, bias_v, ...);
+> }
+> ```
+>
+> **三个坑 → 三个对策**（逐条兑现上面那份清单）：
+> ① 布局坑**天然规避**——`out_k/out_v` 由 kernel 自己按 `[M_kv,N_k]`/`[N_q,M_kv]` 写，缓存只是"不再重写"，
+> 所以不存在"预计算产出布局对不对"的问题；② 确实**必须改 kernel**（host 少传参数省不掉任何东西），
+> 但**签名不动、只加一态** ⇒ FFI/wheel ABI 零破坏，默认 0/1 路径逐条指令不变（故 5 个 op 级 unit 回归零影响可信）；
+> ③ 缓存键 `(data_ptr, shape, dtype)` + 每次 `get_action` 起始 `_reset_dit_cross_kv()` 清 8 个 cross block。
+>
+> **实测（device 1、seed42、inject3 三相机）**
+>
+> | 项 | 结果 |
+> |---|---|
+> | 命中 | 8 个 cross 层 step1 计算、step2-4 全部 `kv_from_nh1=2` HIT |
+> | 精度（缓存 ON vs OFF） | **逐位一致 `maxdiff = 0.0`** |
+> | 精度（vs L20/CPU baseline） | `action_pred` 0.999998 / `left_hand` 0.9895（与 v0.2-fix 同口径一致） |
+> | 性能 | round **0.113 s (OFF) vs 0.114 s (ON)** —— 在抖动内，**无端到端收益** |
+> | op 级单测 | `adaln_qkv_mha_out` 5 个 unit 全过（默认路径零影响） |
+>
+> **判读（本节预测被坐实）**：省不到 launch 数（K/V gemm 早已在每 block 那一次 FFI 内），
+> 而这台 NPU 的头号货币是 host 往返 —— 于是**省掉"每层最肥的一次 GEMM"（`M_kv≈296`，对比 Q 侧 `M_q=49`）
+> 与 ~300 MB/round 权重带宽之后，e2e 一动不动**。这不是优化太弱，而是一个**可复现的反证实验**：
+> 它把"瓶颈不在算力"从口径推算变成了实测事实。
+> **trace 级判读（2026-09-24 补：同一份改动的两份 pytorch/LPU perf trace 对账）**
+>
+> 板端同一进程配置跑两遍（`GROOT_NPU_DIT_KV_CACHE=1/0`，各 `activities=[CPU,LPU]`、`active=2` ⇒ 每份只有
+> 2 个 step，E100×2、`torch_lpu 2.11.0`），产物落 `logs/trace_kvcache_{ON,OFF}/`。
+> 复跑脚本 **`tools/trace_kv_cache_diff.py <ON> <OFF>`**（输出下面六张表）。
+>
+> | 口径 | OFF | ON | Δ | 读法 |
+> |---|---|---|---|---|
+> | `Step_time`（step0/1） | 123.8 / 138.6 ms | 167.6 / 177.2 ms | +44 / +39 ms | ⚠ 见下"反证" |
+> | `Computation` | 86.9 / 86.9 ms | **80.1 / 80.1 ms** | **−6.8 ms/step（−7.9%）** | 设备算力账兑现 |
+> | `ComputationRatio`（设备忙比） | 70.2% / 62.7% | 47.8% / 45.2% | −22 / −18 pt | 省下的算力全落 idle |
+> | `Free`（设备空闲） | 36.7 / 51.6 ms | 87.4 / 97.0 ms | +50.7 / +45.4 ms | 同上 |
+> | **kernel 总数** | **1273** | **1273** | **0** | 「省不到 launch」第一次被直接量到 |
+> | `evLaunchKernel` / `evStreamSynchronize` / `evMemcpyAsync` 次数 | 1228 / 26 / 46 | 1228 / 26 / 46 | 0 / 0 / 0 | 发射与往返一条没少 |
+> | kernel 总时长 | 174.11 ms | 160.49 ms | −13.62 ms（2 步） | 全部差值集中在**一个** kernel |
+>
+> **差值的解剖（kernel 表 13 类里 12 类逐类不动）**：唯一变化的是把 K/V 投影折进去的那个融合 kernel
+> `adaln_qkv_run_die`（128 次 → 次数不变）：45.83 ms → 32.38 ms。把它按**单次时长**摊开，缓存的语义
+> 在 trace 里直接现形（每次 `get_action` = 16 block × 4 去噪步 = 64 次，cross 落在偶数位）：
+>
+> | 单次分类 | OFF | ON |
+> |---|---|---|
+> | cross：K/V **计算** | 32 次 × 466 µs | **8 次** × 467 µs（只在去噪步 0） |
+> | cross：K/V **HIT**（跳投影） | — | **24 次** × 185 µs |
+> | self-attn（不涉及 encoder） | 32 次 × 250 µs | 32 次 × 251 µs |
+>
+> 三处口径互相闭合：单次省 466−185 = **281 µs** × 24 次 = **6.75 ms/step** ≈ step 表 `Computation`
+> 差 **6.84 ms** ≈ kernel 表总时长差 13.62/2 = 6.81 ms。**§6.7 那笔"FLOPs 能省、launch 省不掉"的账，
+> 从推断变成三个独立口径同数的实测。**
+>
+> **坑 6 要的 HIT 探针，trace 里是现成的**：ON 每一步恰好 `8 计算 + 24 HIT`（= 设计值 8 个 cross 层 ×
+> 1 次首算 + 8×3 次复用），且两个采样 step（两次独立 `get_action`）**都以 8 次全算开头** ⇒
+> `_reset_dit_cross_kv()` 确实每次生效、跨调用没有 `data_ptr` 串号。**这正是数值对账看不见的信息**
+> （`maxdiff=0.0` 无法区分"缓存对了"和"缓存错了但 ON/OFF 都错一样"），而 kernel 时长双峰能区分。
+>
+> **idle 长在哪**：按"gap 前一个 kernel"归因，增长最大的是 `mlp_gelu_norm_run_die` 之后
+> （128 次 = 每个 DiT block 末尾、下一 block 发射前）合计 1.40 ms → **50.03 ms**，单次 11 µs → 391 µs。
+> 设备算得更快了，于是更早算完、原地等 host 发射下一个 block——**省算力不改分子只改分母，
+> 墙钟由 host 发射流水决定**，这就是本节"正确但非当期瓶颈"的时域形状。
+>
+> **反证（诚实边界，必须先读再引用上面那行 `+44 ms`）**：ON 那份 host 侧是**全局**变慢的，
+> 而本补丁只可能碰 DiT 的 cross 分支——未被触及的 backbone 帧同样变慢
+> （`eagle.py:89 _eagle_vl_forward_fused` 47.6 → 74.8 ms/2 次，backbone `forward_eagle` 同涨），
+> host 帧整体约 ×1.5；且 profiler 本身把绝对值抬高（trace 里 124–177 ms/round，
+> 干净 wall-clock 是 113/114 ms）。⇒ **那 +44 ms 属采样噪声/profiler 扰动，不能写成"缓存导致回退"**；
+> 要下"有/无回退"的结论，得 N 次重复 A/B（当前是单进程 × 2 step × 单样本）。
+> 可复跑的是这三条结构性结论：**省算力精确落在一个 kernel、发射次数一条没省、设备早已不在关键路径上**。
+>
+>
+> **落地时新增的第 4~6 个坑（原清单没写到的，判卷时补）**：
+>
+> 4. **缓存键与 `_ditbufs` 是两个独立 key**：K/V 值住在按**形状 key** 分配的 `_ditbufs` 里，
+>    命中判定却只看 `enc_key`。今天安全是因为一次 `get_action` 内 `m` 恒为 49；将来支持变长 horizon
+>    或走 `AlternateVLDiT`（`cross_attention_dit.py:336`）使 `_ditbufs` 在 `enc_key` 不变时重新分配，
+>    MHA 就读到未初始化显存，且**是垃圾不是 NaN**——又表现为"MSE 偏高一点"（§6.5 同族事故）。
+>    修法：`enc_key` 并上 `_ditbufs` 的 key（或 buffer 代数计数器）。
+> 5. **`ptr` 复用只靠 reset 的纪律性防守**：分配器给"同尺寸新张量"复用同一 `data_ptr` 是**正常行为**。
+>    根治法代价一行：把 `encoder_hidden_states` **本体存进缓存项**（持强引用）⇒ 那份存储不可能被回收复用
+>    ⇒ 串号在物理上不成立，reset 从"防错机制"降级为"内存回收时机"。
+> 6. **失效逻辑不可被数值对账看见**：`maxdiff=0.0` 是"正确时必然成立"，但**缓存被错误复用时同样逐位等价**
+>    （只是等价于另一份观测的 K/V）⇒ 数值对账对失效路径是**盲区**。要么把 HIT/MISS 计数落码
+>    （现成的 `_dbg_once`），要么加**守卫探针**：同进程连跑两个不同 obs 的 `get_action`，
+>    守卫失效时第二个 obs 的 `action_pred` 会等于第一个的——单点定死，比 cos 表灵敏。
+>
+> **口径提醒**：`left_hand 0.9895` 与 CHANGELOG `[0.2.0]` 的 `0.99200` **不可直接比**
+> （inject3/device 1/vs L20-CPU ≠ 3cam seed42 golden）。判"有无回退"的正确口径是**同口径 ON/OFF 差 = 0.0**。
+>
+> **镜像教训（更新）**：融合把这笔白算吞进 `dit_block_fused` 后，它不再出现在 profiler 顶层——
+> **从"可见的慢"变成"隐形的慢"**。优化被融合吞掉之后，可观测性也要跟着下沉一层
+> （看 `GROOT_NPU_DIT_KV_CACHE=0/1` 的 A/B 差值，而不是找顶层算子名）。
+> 方法论最后一句：**能省的不等于该省的；先量瓶颈，再谈常量提升。**
 
 ## 6.8 Action Head 的 Attention 全解（源码考证版）
 

@@ -261,7 +261,7 @@ reshape_and_cache_flash residual_add rmsnorm silu sinusoidal_pe timestep_encoder
 *图 9-4：自绘（`tools/mk_fig_ch09_dit_granularity.py`）——同一个 DiT block 在三种粒度下的样子。
 16 层 × 4 去噪步 = 64 个 block 执行：原生 aten ≈15 次发射/层 ⇒ ≈960 次/轮；块内三融合 ⇒ 192 次/轮；
 `dit_block_fused` 整块 ⇒ **64 次/轮**。省下来的不是 FLOP，是 host→device 往返与 aten 中间张量的
-contiguous/permute。右下红框是 §6.7 唯一未落地项，详见 §7。*
+contiguous/permute。右下红框原为"§6.7 未落地项"，现已改为**该优化落地后的实测结论**（详见 §7）。*
 
 三点读图说明：
 
@@ -272,7 +272,8 @@ contiguous/permute。右下红框是 §6.7 唯一未落地项，详见 §7。*
    `out_v=[N_q,M_kv]`（**V 是转置布局**，对应 §6.8 的维度账本）、`wt_v` 必须 `[K_kv,N_q]`、
    `out_q=[N_q,M_q]`，不满足直接 `TVM_FFI_THROW`。**宁可当场抛，不要静默算错**——
    这与 §3.5 守卫"宁可回退，不要勉强融合"是一体两面。
-3. **省发射 ≠ 省时间。** v0.2 稳态 0.14 s/round，而 profile 里 `to_lpu` 累计 6148 ms、
+3. **省发射 ≠ 省时间。** v0.2 tag 稳态 0.14 s/round（板端 v0.2-fix 线现已 ~0.113 s/round，
+   device 1 / inject3 口径，别与 tag 口径混用），而 profile 里 `to_lpu` 累计 6148 ms、
    `page_kv` 1691 ms（`page_kv` 是把 k/v 搬回 host 重排成 paged 再传上去，`attention.py:306-314`）。
    两个数同时成立恰恰说明：**剩余瓶颈在 host↔device 往返，不在算力**。单 Die 的
    `unified_mha` 稠密非分页路径（`attention.py:278-287`）就是为了绕开 `page_kv` 而生。
@@ -308,7 +309,7 @@ contiguous/permute。右下红框是 §6.7 唯一未落地项，详见 §7。*
 
 | # | 教材结论 | v0.2 代码证据 | 判定 |
 |---|---|---|---|
-| 1 | §6.7 cross-attn 的 K/V 在一次 `get_action` 的 K 步里恒定，可缓存 | `action.py:743` 每次喂 `encoder_l`；`:752` `kv_from_nh1 = 0 if is_cross`；`dit_block_ffi.cc:134-135/205-225` 实参含 `wt_k/wt_v`，每步重写 `out_k/out_v` | ❌ **未实现**。4 步 × 8 个 cross 层 × 2 投影 = 64 次，其中 **48 次白算（≈90 GFLOP）** |
+| 1 | §6.7 cross-attn 的 K/V 在一次 `get_action` 的 K 步里恒定，可缓存 | v0.2 tag：`action.py:743` 每次喂 `encoder_l`、`:752` `kv_from_nh1 = 0 if is_cross`、`dit_block_ffi.cc:134-135/205-225` 每步重写 `out_k/out_v`；**2026-09-24 板端 v0.2-fix 线落地**：kernel 加第三态 `kv_from_nh1==2`（`adaln_qkv_kernel.ac` +12/−4）+ host 按 `vl_embs` 缓存（`action.py` +32，`GROOT_NPU_DIT_KV_CACHE`） | ❌ v0.2 tag **未实现**（48 次白算 ≈90 GFLOP）→ ✅ **已落地**：8 次计算 + 24 次复用、ON/OFF **逐位一致**，**但 e2e 无收益**（0.113 vs 0.114 s）；trace 对账：设备 **−6.8 ms/step**、**launch 次数 1228→1228 不变** |
 | 2 | §6.7 循环不变量（`state_features`/`future_tokens`/`pos_embs`）该提到循环外 | `action.py:1275-1288`（#152 O1）已提升；`pe.configure` 预热 | ✅ 已做，且有一次**反例回归** `d34a44f`：`pos_ids` 行数误取 `state_horizon(=1)`，16 个 action 行全广播第 0 行位置编码 ⇒ `right_arm/left_hand` cos 掉到 **0.97/0.82** |
 | 3 | §6.7 AdaLN 的 scale/shift 只依赖 t，t 只有 4 个取值 | #173 `norm1._scale_shift(temb,n,dev)` 按 `(block,ts)` 缓存（`action.py:821`，省 9.4 MB/调用）；`timestep_encoder` 按 ts 桶常驻 | ✅ **比教材更进一步**：不仅缓存，还吃掉了"t 只取 4 个离散值" |
 | 4 | §6.8 DiT self/cross 的 M、kv_len 来源 | `action.py:702` `kv_len = prod(encoder.shape[:-1]) if is_cross else m`；M = 1(state)+32(future)+16(action) = **49**；`attention.py:274` 实测 shape 桶 `LQ64_LKV49`（64 = pad 到 mha_B=64） | ✅ 与 §6.8 序列拼装一致 |
@@ -317,12 +318,29 @@ contiguous/permute。右下红框是 §6.7 唯一未落地项，详见 §7。*
 | 7 | dropout=0.2 仅训练态，推理应关闭 | `GROOT_NPU_SKIP_NOOP_DROPOUT=1`（`action.py:535`）对应原生 `:174` 的 `final_dropout` | ✅ 推理态等价省略 |
 | 8 | §6.6 绘图师：t 与动作一起进 encoder | `gemm_bias(W1)` + `mlp_silu`（`:1196-1207`），t 侧 `sinusoidal_pe_die(ts)` 按 ts 缓存 | ✅ 形状一致，且"t 只有 4 值"被 kernel 侧吃干净 |
 
-**一句话总结**：8 条里 7 条得到 kernel 级印证，唯一没落地的是 §6.7 的 cross K/V 缓存。
-而它没落地的原因也很说明问题——三条前提里已满足两条半：`process_backbone_output` 已在去噪循环外
-（`flow_matching_action_head.py:352`）、`NPULinear._lpu()` 权重常驻、`_ditbufs` 缓冲常驻
-（`action.py:754-770`）；缺的是 kernel 侧的第三态（`kv_from_nh1` 目前只有 0/1，没有"复用上次 `out_k/out_v`"）。
-**而且整块融合之后，这笔白算被吞进 `dit_block_fused` 内部，从"可见的慢"变成了"隐形的慢"**——
-profiler 顶层再也看不到它，这是融合工程自己的副作用。
+**一句话总结**：8 条全部得到 kernel 级印证；唯一在 v0.2 tag 上没落地的第 1 条，
+**已在 2026-09-24 板端实现并验证**（`kv_from_nh1==2` 第三态，8 次计算 + 24 次复用，
+ON/OFF 输出**逐位一致 `maxdiff=0.0`**，`round 0.113 s(OFF) vs 0.114 s(ON)` ⇒ **无端到端收益**）。
+实现细节、三个原坑的兑现方式与落地时新暴露的第 4~6 个坑，全部记在**第 06 章 §6.7 附录「落地实况」**。
+
+这次"预测 → 实现 → 实测无收益"的闭环比优化本身更值钱，它坐实了三件事
+（第 3 件来自 2026-09-24 的 ON/OFF 两份 perf trace 对账，复跑脚本 `tools/trace_kv_cache_diff.py`）：
+
+1. **§4.3 的账是对的**：这笔优化省不到 launch 数（K/V gemm 早在每 block 那一次 FFI 里），
+   而这台 NPU 的头号货币是 host 往返 ⇒ **省掉每层最肥的一次 GEMM（`M_kv≈296` 对比 Q 侧 `M_q=49`）
+   加 ~300 MB/round 权重带宽，e2e 一动不动**。"瓶颈不在算力"从推算变成了反证实验。
+2. **融合改变可观测性**：整块融合后这笔白算被吞进 `dit_block_fused` 内部，不再出现在 profiler 顶层——
+   从"可见的慢"变成"隐形的慢"。**优化被融合吞掉之后，可观测性也要跟着下沉一层**
+   （只能靠 `GROOT_NPU_DIT_KV_CACHE=0/1` 这类 A/B 开关量差值，顶层算子名里找不到它）。
+3. **瓶颈判据可以直接被 trace 量出来（不必靠 wall-clock 猜）**：ON/OFF 两份 trace 里
+   **kernel 总数 1273=1273、`evLaunchKernel` 1228=1228、`evStreamSynchronize` 26=26、`evMemcpyAsync` 46=46**
+   ——发射与往返一条没省（第 1 条的结构性证明）；而 13 类 kernel 里 12 类逐类不动，差值精确落在
+   把 K/V 投影折进去的 `adaln_qkv_run_die`（45.83→32.38 ms / 2 步，**单次 466 µs → HIT 185 µs**），
+   合计 **−6.8 ms/step**，与 step 表 `Computation` 差、kernel 总时长差**三处口径同数**；
+   与此同时设备忙比从 70.2% 掉到 47.8%、空闲 +50 ms，增量最大的空闲在每个 DiT block 末尾
+   （`mlp_gelu_norm` 之后 11 µs → 391 µs）——**设备算完在等 host 发射**，这才是"e2e 不动"的时域形状。
+   ⚠ 引用那两个 step 的 `Step_time`（ON 反而 +44 ms）前先读 06 章 §6.7 的**反证**：ON 那次采样 host
+   全局 ×1.5（连补丁碰不到的 backbone 帧一起慢），属 profiler 扰动/单样本噪声，**不可归因给缓存**。
 
 验证口径（要复跑就用这三条，`deployment_scripts/npu/README.md`）：
 `sd_e2e.py --no-prof --rounds 5`（稳态 wall）、`dump_action_all.py` + `cos_check.py`
@@ -353,6 +371,8 @@ v0.2 的 3cam golden：`action_pred` 0.99999 / `left_hand` 0.99200 / `right_hand
 - **布局与 dtype 是 ABI 不是风格**：fp16 主链（bf16 无 split 互转）、`[2,*]` die 轴复刻、
   单 Die 必须 `INIT_SINGLE_DIE`、V 的转置布局由 kernel 硬校验。
 - **版本号也是契约**：op 集合可以直接 `git ls-tree` 出来，本章 §4.2/§6 的勘误就是这么抓出来的。
+- **"能省"≠"该省"**：§6.7 的 cross K/V 缓存 2026-09-24 落地后 ON/OFF 逐位一致、**e2e 无收益**——
+  省掉最肥的 GEMM 也看不见，因为瓶颈是 host 往返。**先量瓶颈，再做常量提升**（第 06 章 §6.7 附录）。
 - 对读者：理解"三级入口 + 融合粒度 + 对账口径"即可，无需逐行读 `.ac` 内核。
 
 ## 本课提问（v0.2 走读 · 待作答）
@@ -360,10 +380,19 @@ v0.2 的 3cam golden：`action_pred` 0.99999 / `left_hand` 0.99200 / `right_hand
 **Q1（时序契约）** 如果有人把 `install()` 写在了 `from_pretrained()` **之后**，程序会报错、还是静默出结果？
 如果是静默，你会用**哪一个**已有的探针最快证明"叶子没被换掉"（不许加新日志）？
 
-**Q2（落地 §6.7）** 现在要把 cross-attn 的 K/V 缓存真正实现。请问：改动主要在 host 侧（`action.py`）
+**Q2（落地 §6.7）— 已由实作作答（2026-09-24 板端 v0.2-fix 线，判卷见第 06 章 §6.7 附录）**
+现在要把 cross-attn 的 K/V 缓存真正实现。请问：改动主要在 host 侧（`action.py`）
 还是 kernel 侧（`dit_block_ffi.cc`）？给出**最小改动契约**——`dit_block_fused` 的实参表里哪些位可以去掉、
 哪两个 buffer 要从 `_ditbufs` 的"每步覆盖"变成"跨步只写一次"、`kv_from_nh1` 需要增加什么语义？
 以及：为什么这个改动**必须**配 526-leaf `cos_check.py` 全量对账才允许合入，而不能只看 `action_pred` 的 cos？
+
+> **判卷要点**：① 答"主要在 kernel"对——实际只改了 `adaln_qkv_kernel.ac`（+12/−4）与 host（+32），
+> `dit_block_ffi.cc` **一行没动**：因为**形参一位都不用去掉**，最小契约就是"加一态、不动签名"，
+> 比"删参数"更省（ABI/wheel 不破）。② "哪两个 buffer"= `_ditbufs` 的 `kT/vT`，实作靠 `enc_key` 命中判定
+> 实现"跨步只写一次"（第 4 坑：这个 key 应与 `_ditbufs` 的形状 key 合并）。③ 语义 = `kv_from_nh1==2`
+> （precomputed/skip），默认 0/1 路径零改动。④ "必须全量对账"的理由要说的是**关节级回退**：
+> `action_pred` 的整体 cos 会被大关节稀释，v0.2 当年 `left_hand` 0.992、`right_hand` 1.000 并存，
+> 只看总体 cos 会放行小关节回退——实作这次连 `maxdiff=0.0` 都拿到了，但仍要用 526-leaf 兜住"逐位一致"这个断言。
 
 **Q3（布局即 ABI）** `dit_block_ffi.cc:214-218` 强制 `out_v` 是 `[N_q, M_kv]`（转置），而 `out_k` 是
 `[M_kv, N_k]`（不转置）。attention 里 Q 和 K 要做内积、V 只被 softmax 权重加权——顺着这个不对称想一想：

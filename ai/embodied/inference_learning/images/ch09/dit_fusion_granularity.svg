@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1560" height="836" viewBox="0 0 1560 836" font-family="Helvetica, Arial, 'Noto Sans CJK SC', 'WenQuanYi Zen Hei', sans-serif">
+<svg xmlns="http://www.w3.org/2000/svg" width="1560" height="858" viewBox="0 0 1560 858" font-family="Helvetica, Arial, 'Noto Sans CJK SC', 'WenQuanYi Zen Hei', sans-serif">
 <defs><marker id="arr" markerWidth="10" markerHeight="10" refX="7" refY="3" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L8,3 L0,6 Z" fill="#555"/></marker></defs>
 <rect x="0" y="0" width="1560" height="1180" rx="0" fill="#fcfcfc" stroke="none" stroke-width="0"/>
 <text x="780.0" y="40" font-size="23" font-weight="bold" fill="#222" text-anchor="middle">一个 DiT block 的融合粒度阶梯：960 次发射 → 64 次，然后瓶颈搬家到 host 往返</text>
@@ -79,11 +79,12 @@
 <text x="67" y="562" font-size="12.5" font-weight="normal" fill="#33506b" text-anchor="start">960 → 192 → 64 次发射：省下来的不是 FLOP，是 host→device 往返与 aten 中间张量的 contiguous/permute。</text>
 <text x="67" y="584" font-size="12.5" font-weight="normal" fill="#33506b" text-anchor="start">但 v0.2 稳态 0.14 s/round 的同时，profile 里 to_lpu 累计 6148 ms、page_kv 1691 ms，远大于单轮耗时——</text>
 <text x="67" y="606" font-size="12.5" font-weight="normal" fill="#33506b" text-anchor="start">两个数同时成立恰恰说明：剩余瓶颈在 host↔device 往返（page_kv 把 k/v 搬回 host 重排成 paged 再传上去），不在算力。</text>
-<rect x="45" y="636" width="1490" height="172" rx="10" fill="#fdecea" stroke="#c0392b" stroke-width="2"/>
-<text x="67" y="663" font-size="15.5" font-weight="bold" fill="#a3271d" text-anchor="start">整块融合没有做的（§6.7 唯一未落地项）：cross-attention 的 K/V 每步重投</text>
-<text x="67" y="691" font-size="12.5" font-weight="normal" fill="#8e2b21" text-anchor="start">· cross 层的 K/V 源 = backbone feature，一次 get_action 的 4 步内恒定 ⇒ 数学上可缓存。</text>
-<text x="67" y="715" font-size="12.5" font-weight="normal" fill="#8e2b21" text-anchor="start">· kernel 仍每步吃 encoder + wt_k + wt_v：action.py:743 每次喂 encoder_l、:752 kv_from_nh1 = 0，</text>
-<text x="67" y="737" font-size="12.5" font-weight="normal" fill="#8e2b21" text-anchor="start">　dit_block_ffi.cc:214-219 每步重写 out_k / out_v ⇒ 4 步 × 8 个 cross 层 × 2 投影 = 64 次，其中 48 次白算（≈90 GFLOP）。</text>
-<text x="67" y="761" font-size="12.5" font-weight="normal" fill="#8e2b21" text-anchor="start">· 整块融合后它被吞进 dit_block_fused 内部 ⇒ 不再出现在 profiler 顶层，从「可见的慢」变成「隐形的慢」。</text>
-<text x="67" y="785" font-size="12.5" font-weight="normal" fill="#8e2b21" text-anchor="start">· 前置条件已就位：process_backbone_output 在循环外（flow_matching_action_head.py:352）、_ditbufs 常驻（action.py:754）。</text>
+<rect x="45" y="636" width="1490" height="194" rx="10" fill="#fdecea" stroke="#c0392b" stroke-width="2"/>
+<text x="67" y="663" font-size="15.5" font-weight="bold" fill="#a3271d" text-anchor="start">§6.7 的 cross K/V 每步重投：2026-09-24 已落地（v0.2-fix 线）——实测证明瓶颈不在 FLOPs</text>
+<text x="67" y="691" font-size="12.5" font-weight="normal" fill="#8e2b21" text-anchor="start">· 原状：kernel 每步吃 encoder + wt_k + wt_v（action.py:743/752 kv_from_nh1 = 0），4 步 × 8 层 × 2 投影里 48 次白算（≈90 GFLOP）。</text>
+<text x="67" y="715" font-size="12.5" font-weight="normal" fill="#8e2b21" text-anchor="start">· 落地：kernel 加第三态 kv_from_nh1 == 2（adaln_qkv_kernel.ac +12/-4，两个 run_die 各一处）——Q 照投影，K/V 跳过，MHA 直读常驻 kT/vT。</text>
+<text x="67" y="737" font-size="12.5" font-weight="normal" fill="#8e2b21" text-anchor="start">　host：cross 层按 vl_embs (ptr,shape,dtype) 缓存，首次 =0 计算、后三拍 =2；get_action 起始 reset 防 data_ptr 串号（action.py +32）。</text>
+<text x="67" y="761" font-size="12.5" font-weight="normal" fill="#8e2b21" text-anchor="start">· 结果：8 层 step1 计算 / step2-4 HIT；ON vs OFF 输出逐位一致 maxdiff=0.0；round 0.113 s(OFF) vs 0.114 s(ON)，在抖动内。</text>
+<text x="67" y="785" font-size="12.5" font-weight="normal" fill="#8e2b21" text-anchor="start">· 判读：省不到 launch 数（K/V gemm 早在 block 那次 FFI 里），且这台 NPU 头号瓶颈是 host 往返 ⇒ 收益记在 device 时间与带宽两栏，</text>
+<text x="67" y="807" font-size="12.5" font-weight="normal" fill="#8e2b21" text-anchor="start">　e2e 不可见。K/V 的 M_kv≈296 是每层最肥的一次 GEMM（Q 侧 M_q=49），省掉它 e2e 仍不动 —— 这是「瓶颈不在算力」的反证实验。</text>
 </svg>

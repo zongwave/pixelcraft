@@ -151,18 +151,19 @@ for ln, dy in [("960 → 192 → 64 次发射：省下来的不是 FLOP，是 ho
     s.text(X0 + 22, bot + dy, ln, 12.5, color="#33506b")
 
 y2 = bot + 124
-s.rect(X0, y2, CW * 3 + GAP * 2, 172, "#fdecea", "#c0392b", 10, 2)
-s.text(X0 + 22, y2 + 27, "整块融合没有做的（§6.7 唯一未落地项）：cross-attention 的 K/V 每步重投",
+s.rect(X0, y2, CW * 3 + GAP * 2, 194, "#fdecea", "#c0392b", 10, 2)
+s.text(X0 + 22, y2 + 27, "§6.7 的 cross K/V 每步重投：2026-09-24 已落地（v0.2-fix 线）——实测证明瓶颈不在 FLOPs",
        15.5, bold=True, color="#a3271d")
-for ln, dy in [("· cross 层的 K/V 源 = backbone feature，一次 get_action 的 4 步内恒定 ⇒ 数学上可缓存。", 55),
-               ("· kernel 仍每步吃 encoder + wt_k + wt_v：action.py:743 每次喂 encoder_l、:752 kv_from_nh1 = 0，", 79),
-               ("　dit_block_ffi.cc:214-219 每步重写 out_k / out_v ⇒ 4 步 × 8 个 cross 层 × 2 投影 = 64 次，其中 48 次白算（≈90 GFLOP）。", 101),
-               ("· 整块融合后它被吞进 dit_block_fused 内部 ⇒ 不再出现在 profiler 顶层，从「可见的慢」变成「隐形的慢」。", 125),
-               ("· 前置条件已就位：process_backbone_output 在循环外（flow_matching_action_head.py:352）、_ditbufs 常驻（action.py:754）。", 149)]:
+for ln, dy in [("· 原状：kernel 每步吃 encoder + wt_k + wt_v（action.py:743/752 kv_from_nh1 = 0），4 步 × 8 层 × 2 投影里 48 次白算（≈90 GFLOP）。", 55),
+               ("· 落地：kernel 加第三态 kv_from_nh1 == 2（adaln_qkv_kernel.ac +12/-4，两个 run_die 各一处）——Q 照投影，K/V 跳过，MHA 直读常驻 kT/vT。", 79),
+               ("　host：cross 层按 vl_embs (ptr,shape,dtype) 缓存，首次 =0 计算、后三拍 =2；get_action 起始 reset 防 data_ptr 串号（action.py +32）。", 101),
+               ("· 结果：8 层 step1 计算 / step2-4 HIT；ON vs OFF 输出逐位一致 maxdiff=0.0；round 0.113 s(OFF) vs 0.114 s(ON)，在抖动内。", 125),
+               ("· 判读：省不到 launch 数（K/V gemm 早在 block 那次 FFI 里），且这台 NPU 头号瓶颈是 host 往返 ⇒ 收益记在 device 时间与带宽两栏，", 149),
+               ("　e2e 不可见。K/V 的 M_kv≈296 是每层最肥的一次 GEMM（Q 侧 M_q=49），省掉它 e2e 仍不动 —— 这是「瓶颈不在算力」的反证实验。", 171)]:
     chk("strip2", ln, 12.5, CW * 3 + GAP * 2 - 44)
     s.text(X0 + 22, y2 + dy, ln, 12.5, color="#8e2b21")
 
-H = y2 + 172 + 28
+H = y2 + 194 + 28
 
 out = os.path.join(os.path.dirname(__file__), "..", "images", "ch09", "dit_fusion_granularity.svg")
 with open(out, "w", encoding="utf-8") as f:
