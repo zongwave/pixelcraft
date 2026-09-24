@@ -131,6 +131,15 @@ actions = actions + dt * pred_velocity     # 欧拉法求解 ODE: dx/dt = veloci
   的旋钮。GR00T-N1.5 常用 4 步左右已经能出不错结果。
 - `@torch.no_grad()`：推理不求梯度，省显存、更快。
 
+> **[!] 与开源 N1.5 实码逐行对齐（2026-09-24，`flow_matching_action_head.py@5e3ef5e`）**
+> 上面的循环是**教学版骨架**，实码有三处差别，排雷时按实码为准：
+> ① **没有 `future_tokens`**——实码是 `sa_embs = torch.cat((state_features, action_features), dim=1)`，
+>    Q 侧序列长 `T_q = N_s + 16`（config 里残留的 `num_target_vision_tokens=32` 在开源 head 中**无模块消费**）；
+> ② `get_action` 调 `self.model(...)` 时**连 `encoder_attention_mask` 都没传**（训练 `forward` 传了，
+>    但同样被 `DiT.forward` 丢弃 → 详见 §6.8.5）；
+> ③ `t_cont = t / num_steps` 从 **0** 起算，K=4 时网络实际被查询的时刻是 `t ∈ {0, .25, .5, .75}`，
+>    `t=1` 那一端永不被查询——与 §3.6 "训练时刻密度要对齐推理查询时刻"直接呼应。
+
 
 ### 3.5 思想实验：完美"1 步采样"恰好落在均值上（mode averaging 幽灵回归）
 
@@ -181,8 +190,8 @@ actions_1 = ε + (E[x|obs] − ε) = E[x|obs]    ← 正是回归头的 mode-ave
 | `state_encoder`(CategorySpecificMLP) | 把机器人当前 state 编码成条件特征 |
 | `action_encoder`(MultiEmbodimentActionEncoder) | 把"当前(噪声)动作轨迹 + 时间 t"编码成 token |
 | `action_decoder`(CategorySpecificMLP) | 把 DiT 输出解回动作空间 `(B, H, action_dim)` |
-| `DiT`(cross_attention_dit) | 扩散 transformer 主体，做自注意力+以 vl 为条件的交叉注意力 |
-| `future_tokens`(nn.Embedding) | 一组可学习的"未来目标" token，辅助生成 |
+| `DiT`(cross_attention_dit) | 扩散 transformer 主体，**16 层交替**：偶数层 cross（看观测）、奇数层 self（动作 token 互通气），细节见 §6.8 |
+| ~~`future_tokens`~~(nn.Embedding) | 可学习的"未来目标" token，辅助生成。**⚠️ 开源 N1.5 已无此模块**（见 §3 勘误①），旧版/内部版才有 |
 | `vl_self_attention` + `vlln`(LayerNorm) | 对 backbone 特征先做层归一化+自身注意力提炼 |
 | `position_embedding` | 给动作 token 加位置信息（顺序/时间） |
 
@@ -262,9 +271,14 @@ actions = ε + K·dt·v₁ = ε + 1·v₁        (dt = 1/K)
 §6.5 那句校准"`vl_embs` 恒定是设计使然"可以直接兑现成一项推理优化：K 步循环里 `vl_embs` 不变 ⇒ **每层 cross-attention 的 K/V 投影也不变**：
 
 ```python
-每层: K_l = to_k_l(vl_embs)   # 输入常量 × 权重常量 ⇒ 输出也是常量
-      V_l = to_v_l(vl_embs)   # L 层各一份，全部可提升到循环外预计算
+每层 cross: K_l = to_k_l(vl_embs)   # 输入常量 × 权重常量 ⇒ 输出也是常量
+            V_l = to_v_l(vl_embs)   # 8 个 cross 层各一份，全部可提升到循环外预计算
 ```
+
+> **精度修正（2026-09-24 源码考证，见 §6.8）**：不是"16 层各一份"，而是 **16 层里只有 8 个偶数
+> `cross` 层有 K/V 可缓存**——奇数层是 self-attention，它的 K/V 来自每步都在变的 `sa_embs`，
+> 天生不可缓存。缓存对象是 `to_k_l/to_v_l` 的**投影输出** `[B, 296, 1536]`（注意是投到 1536 之后，
+> 不是 2048 的原图）：单张 ≈ 0.9 MiB(bf16)，K+V × 8 层 ≈ **14 MiB/样本**，相对骨干是零头。
 
 朴素实现每步把这套投影重算一遍（K=4 白算 3 遍）；提升到循环外，cross-attn 的 K/V 线性层开销直接除以 K。
 
@@ -272,17 +286,140 @@ actions = ε + K·dt·v₁ = ε + 1·v₁        (dt = 1/K)
 
 | K 步循环内部件 | 随步变？ | 可缓存？ |
 |---|---|---|
-| 各层 cross-attn 的 K/V 投影 | 不变（vl_embs 常量） | ✔ 预计算一次 |
-| 各层 cross-attn 的 **Q** 投影 | 变（动作 token 每步重编码） | ✘ |
-| 注意力分数 `softmax(QKᵀ/√d)` | 变（Q 变） | ✘ 每步照算 |
-| self-attn / MLP / adaLN 时间调制 | 全变 | ✘ |
+| 8 个 **cross** 层的 K/V 投影（输入 `vl_embs`） | 不变（常量输入 × 常量权重） | ✔ 预计算一次 |
+| 全部 16 层的 **Q** 投影（输入 `sa_embs`） | 变（动作 token 每步重编码） | ✘ |
+| 注意力分数 `softmax(QKᵀ/√48)` | 变（Q 变） | ✘ 每步照算 |
+| 8 个 **self** 层的 K/V（输入也是 `sa_embs`） | 每步变 | ✘ |
+| FF(GEGLU) / adaLN 时间调制 / 出口调制 | 全变 | ✘ |
 
-显存代价：每层 `[B, 296, d]` 常量 × L 层，相对骨干是零头。
+显存代价：`[B, 296, 1536]` 常量 × 2(K,V) × 8 层 ≈ 14 MiB/样本——**相对骨干是零头**。
+但**算力侧恰恰相反**（下面这笔账），这正是"缓存"这笔买卖划算的原因。
+
+**这笔优化到底值多少（估算）**：cross 层 K/V 投影的算力 ≈ `296 × 2048 × 1536 × 2` ≈ **1.9 GFLOP/投影**，
+K+V × 8 层 ≈ **30 GFLOP/去噪步**；K=4 就是 ~119 GFLOP，缓存后只付一份 30 GFLOP，
+**省下约 90 GFLOP/次 `get_action`**——与整条 DiT 的 16 层 FF（约 30 GFLOP/步）同量级。
+结论：**这套配置里"白算 K/V"不是零头开销，而是 DiT 前向里最大的单项**——显存上是零头、算力上是大头，
+"要不要缓存 K/V"的答案由后者决定。（估算口径：只数 GEMM 的 MAC×2，忽略 attention 矩阵与激活，
+数量级用 `296×2048×1536` 与 `16 层 × (N_s+16)×1536×6144` 对比，脚本可复算。）
 
 **谱系**：LLM 推理的孪生兄弟是 **prefill/decode 分离 + KV cache**（提示词 K/V 算一次缓存，每个生成 token 只付 Q 侧）。此处同构：**观测（条件）= prefill，K 步去噪 = decode**。第 09 章 NPU 融合算子做图切分的依据，正是"K 步循环里谁恒定"：恒定子图提出循环编译成常驻段，变化子图做融合 kernel。
 
 > 镜像教训：§6.5 的事故（循环内编码挪出去）与本节的优化（常量 K/V 挪出去）动作相同，
 > 分野只有一个——**被挪的东西输入是否恒定**。hoisting 本身没有对错，性质由数据流分析决定。
+
+## 6.8 Action Head 的 Attention 全解（源码考证版）
+
+> 材料：开源 release（commit `5e3ef5e`）的 `flow_matching_action_head.py` + `cross_attention_dit.py`，
+> 与官方 `GR00T-N1_5-3B/config.json` 交叉核对（2026-09-24 课堂追问"请介绍 action head 中使用的 attention"）。
+> **本节数字全部是 ckpt 实测值，不是类默认参数**；配图可复跑：`python3 tools/mk_fig_ch06_attn_flow.py`。
+
+![action head 的 attention 流程：维度 / 来源 / 用途 / 可缓存性](images/ch06/attn_flow.png)
+*图：三条流——**绿=条件流**（K 步恒定，可缓存）、**橙=草稿流**（每个去噪步都变）、**蓝=时间流**；**紫=掩码链路**（实核结论：传而不达，见 §6.8.5）。右框是 16 层 DiT 的交替结构：蓝色=看观测的 cross 层，橙色=动作 token 互通气的 self 层。*
+
+### 6.8.1 一次 `get_action` 里同时存在三个 attention 现场
+
+| 现场 | 位置 | Q 来自 | K/V 来自 | 头结构 | 随去噪步变？ | 可缓存？ |
+|---|---|---|---|---|---|---|
+| ① 条件侧自注意力 | `vl_self_attention`(`SelfAttentionTransformer`)，在 `process_backbone_output` 内 | `vl` 2048 | `vl` 2048 | 4 层 × 32 头 × **64** = 2048 | 不变 | ✔（且**已经**在循环外：`process_backbone_output` 每次 `get_action` 只调一次） |
+| ② 交叉注意力 | DiT **偶数**层（8/16） | 草稿序列 1536 | **`vl_embs` 2048 → 1536** | 32 头 × **48** = 1536 | K/V 不变、Q 每步变 | ✔ **只 K/V**（§6.7） |
+| ③ 草稿侧自注意力 | DiT **奇数**层（8/16） | `sa_embs` 1536 | 同 Q | 同上 | 全变 | ✘ |
+
+"哪些层真的在看世界"由 `interleave_self_attention=True` 决定：`DiT.forward` 对 `idx % 2 == 1` 的块传
+`encoder_hidden_states=None`，diffusers 的 `Attention` 在该参数为 `None` 时**退回自注意力**（K/V 取自输入自身），
+偶数层才传 `vl_embs`。于是有一条容易记错的结论：**"16 层 DiT"里只有 8 层真的在看观测，另外 8 层是
+16 个动作 token 之间互通气**——§6.7 的"8/16"、以及"能缓存的只有 8 份 K/V"都由此而来。
+
+### 6.8.2 单层 cross-attention 的算式（维度即课程）
+
+```python
+# 以 L0 为例。B=batch, N_q=N_s+16(约 20~32), N_kv=296, h=32 头, d_head=48
+x = sa_embs            # [B, N_q,  1536]  草稿流（每去噪步都变）
+c = vl_embs            # [B, N_kv, 2048]  条件流（一次 get_action 内恒定）
+xn = AdaLN(x, temb)    # (1+scale)*LayerNorm(x)+shift；scale/shift = Linear(1536->3072)(SiLU(temb))
+Q  = to_q(xn)          # [B, N_q,  1536] -> 拆成 32 头 × 48
+K  = to_k(c)           # [B, N_kv, 2048 -> 1536] -> 32 头 × 48      <- 可缓存
+V  = to_v(c)           # 同上                                        <- 可缓存
+A  = softmax(Q K^T / sqrt(48)) V          # 注意力矩阵 [B, 32, N_q, 296]
+out = to_out(A)                            # [B, N_q, 1536]，随后走残差 + FF(GEGLU)
+```
+
+三个容易被忽略的形状事实：
+
+- **K/V 的输入是 2048 而不是 1536**（`cross_attention_dim=2048`）：backbone 侧 `project_to_dim=null`
+  是 Identity 直通（第 05 章勘误），**降维只发生在 `to_k/to_v` 这一刀**；
+- **注意力矩阵极小**：`N_q × N_kv ≈ 30 × 296`。这套 attention 的成本**不在 `QK^T`，而在 K/V 那两个
+  `296 × 2048 × 1536` 的投影**（§6.7 那笔 ~90 GFLOP 就从这里来）。气质上它是
+  **"短查询查长条件"**，与 LLM 的"长查询查长历史"相反——所以 LLM 那套 flash/paged 优化的重心在这里要换位置；
+- DiT 内部**恒为 1536**，出口才被 `proj_out_2` 降到 `output_dim=1024`。
+
+### 6.8.3 时间 t 的三条注入路径（都不碰注意力权重）
+
+| 路 | 通道 | 形状 | 作用 |
+|---|---|---|---|
+| 主路（每层） | `TimestepEncoder`：正弦 256 → MLP → `temb [B,1536]`；每层 `AdaLayerNorm`：`(1+scale)·LayerNorm(x)+shift` | 每层**各有**一套 `Linear(1536→3072)` | 把"胶片进度条"注入每一层的归一化（§6.6 绘图师的进度条） |
+| 副路（一次） | `action_encoder` 内把 t 桶做正弦编码后与动作嵌入 **concat**，`W2(2w→w)+swish` | `[B,16,3072] → [B,16,1536]` | 让每个动作 token 自带"我现在有多糊"的身份 |
+| 出口路（一次） | `shift, scale = proj_out_1(SiLU(temb)).chunk(2)` → `norm_out(x)*(1+scale)+shift` → `proj_out_2` | `[B,T_q,1536] → [B,T_q,1024]` | 出图前的最后一次整体调色调 |
+
+要点：t **不改注意力的 Q/K 投影**，只改被查询的内容与缩放——"看哪里"由观测与草稿决定，
+"这一笔该画多粗"由 t 决定。这解释了为什么 §6.5 事故里把 `action_encoder` 挪出循环必然坏：
+它同时挪走了 t 的副路。
+
+### 6.8.4 顺序信息从哪来（无 RoPE、无因果掩码）
+
+- ckpt 里 `positional_embeddings = null`（DiT 与 `vl_self_attention` 都是）⇒ `BasicTransformerBlock.pos_embed = None`，
+  **块内没有任何位置编码**；
+- 顺序全靠 head 的**可学习** `position_embedding = nn.Embedding(max_seq_len=1024, 1536)`，
+  且 `pos_ids = arange(action_features.shape[1])` —— **只加在 16 个动作 token 上，state token 一个都不加**；
+- 没有因果掩码，动作 token 之间**双向可见**：扩散要的是"整段轨迹一起改写"，不是自回归逐 token
+  （对照第 05 章 LLM 侧的因果掩码，那是两种生成范式的指纹）；
+- 推论：cross-attention 里的 296 个条件 token **没有任何位置概念**，图像块/词的顺序感只能由
+  backbone 内部（VLM 自己有 RoPE）带进来，到 action head 这层已经"洗掉"了。
+
+### 6.8.5 掩码链路实核：`backbone_attention_mask` 传而不达
+
+链路三段、**两处断点**：
+
+1. `get_action` 调 `self.model(hidden_states, encoder_hidden_states, timestep)` —— **根本没传**
+   `encoder_attention_mask`（训练用的 `forward` 里传了 `vl_attn_mask`）；
+2. `DiT.forward` 的两个分支对每个 block 一律写死 `encoder_attention_mask=None`；
+3. `BasicTransformerBlock.forward` 调 `self.attn1(...)` 时那一行
+   `# encoder_attention_mask=encoder_attention_mask,` 是**注释状态**（只剩 `attention_mask=None`）。
+
+⇒ **padding 位置实际会参与 cross-attention 的 softmax**。影响判据：
+
+| 场景 | 有无后果 |
+|---|---|
+| B=1 单机/本体推理（第 13 章常规路径） | 无 padding ⇒ 无害 |
+| batch 推理且同批内指令/图像 token 数不齐（需 padding） | **有条件有害**：注意力质量被分给 pad 位；若训练期 mask 曾生效，就构成训练/推理错位（第 05 章"泄漏的随机性"同族） |
+| 想做"屏蔽某段指令再前向"的可解释性实验 | 不能靠 mask 做，必须真删 token |
+
+教学点：**"契约里有这个键" ≠ "这个键被消费"**。要确认一个条件信号真的生效，得沿链路读到最内层算子——
+与 §6.5 症状表配套，本章新增的这条排雷动作叫**掩码可达性检查**。
+
+### 6.8.6 维度账本（官方 N1.5-3B 实测）
+
+| 环节 | 输入 → 输出 | 关键形状 | 备注 |
+|---|---|---|---|
+| backbone | 观测 → `backbone_features` | `[B,296,2048]` | `select_layer=12`；`project_to_dim=null`(Identity) |
+| ① 条件侧 | `vlln` + `vl_self_attention` | `[B,296,2048]` | 4 层 self-attn，32×**64**；dropout 0.2 仅训练态 |
+| 条件流 | `vl_embs` | `[B,296,2048]` | 一次 `get_action` 内恒定 ⇒ K/V 可缓存 |
+| state | 64 → 1024 → 1536 | `[B,N_s,1536]` | `CategorySpecificMLP`（本体私有） |
+| action | 32 → 1536 | `[B,16,1536]` | `MultiEmbodimentActionEncoder`（+t 桶 +可学习 pos） |
+| 草稿流 | `cat(state, action)` | `[B,T_q=N_s+16,1536]` | **无** future_tokens |
+| DiT × 16 | 1536 → 1536 | cross 层 KV：2048→1536 | 32×**48**；每层 AdaLN(norm1) + FF(GEGLU, inner=4×) |
+| DiT 出口 | 1536 → **1024** | `[B,T_q,1024]` | `proj_out_1` 调制 + `proj_out_2(output_dim=1024)` |
+| 动作头 | 1024 → 1024 → 32 | `[B,T_q,32]` 取 `[-16:]` | `CategorySpecificMLP` → 速度场 `v [B,16,32]` |
+
+一句话账本：**2048 是"世界的语言"，1536 是"思考的语言"，1024 是"出口的语言"，32/64 是"机器人身体体征的语言"**
+——四段之间各有一次可学习的翻译，而"哪些层换本体要重训"的分界线（§首轮 Q5b）就画在这几次翻译上。
+
+### 6.8.7 版本差异（别把考证结论带错分支）
+
+| 版本 | attention 结构 | 备注 |
+|---|---|---|
+| **N1.5**（本章，开源） | `cross_attention_dit.py`：16 层 interleave，偶 cross / 奇 self | 本节结论全部适用 |
+| N1.6 / N1.7 | 新线 `gr00t/model/modules/dit.py`，同一 interleave 骨架 | 见第 12 章版本演进 |
+| N1.7 另有 `AlternateVLDiT` | 图/文条件**交替且稀疏**进 cross（`attend_text_every_n_blocks`） | "只有部分层看文本"的结构化省钱开关；用它的分支上，§6.7 的"可缓存 8/16"要按新的 cross 层数重算 |
 
 ## 7. 本章小结
 
@@ -291,6 +428,9 @@ actions = ε + K·dt·v₁ = ε + 1·v₁        (dt = 1/K)
 - 推理：从随机噪声出发，`num_steps` 步欧拉积分去噪，得到 `action_pred`。
 - 全程无梯度（`@torch.no_grad()`）；`denoising_steps` 是质量/延迟旋钮。
 - category-specific 权重实现"一个模型多种机器人本体"。
+- attention 有三个现场（条件侧 self / DiT cross / DiT self）；**16 层 DiT 只有 8 层 cross**（才谈得上缓存那 8 份 K/V）；
+  块内无位置编码，顺序靠 head 的可学习 `position_embedding`（只加在动作 token 上）；
+  `backbone_attention_mask` 在开源实现里**传而不达**。（§6.8）
 
 
 ### 迁移总结（案例 → 普遍原理：换 pi0/ACT/任何 VLA 仍成立）
@@ -304,6 +444,10 @@ actions = ε + K·dt·v₁ = ε + 1·v₁        (dt = 1/K)
 | CategorySpecific 权重动物园 + `bmm` 索引 | 共享躯干+两端私有翻译=多本体经济学（新本体边际成本 MB 级）；下标传错=安静灾难，需服务层校验/golden 闸门兜底 |
 
 ## 自己动手
+
+0. **掩码可达性检查**（§6.8.5 的排雷动作，值得亲手走一遍）：在 `flow_matching_action_head.py` 里
+   找到 `vl_attn_mask`，一路 grep 它被传给了谁、最终有没有进到 `Attention` 的 softmax 参数表。
+   再用一句话回答："把 batch 从 1 改成 4（指令长度不齐）时，我需要额外做什么？"
 
 1. 手推一遍：如果 `num_steps=1`（`dt=1`），`get_action` 变成 `actions = noise + 1·velocity ≈ x`，
    说明即使 1 步也能近似还原——验证欧拉积分离散。
@@ -366,3 +510,23 @@ actions = ε + K·dt·v₁ = ε + 1·v₁        (dt = 1/K)
 
 - **Q9 "训练出的 DiT 就是图里那些灰箭头？"**：✔ 心智模型成立；三处修进入 §6.6（定格→电影 / 单图→每观测一张 / 问一支箭头=一次前向→延迟乘法）。配图新增绘图师动图 `dit_cartographer.gif`。
 - **Q10 "K/V 只需加载一次"**：✔ 学生独立推出"跨去噪步 KV 缓存"。精化：缓存对象是 **L 层各一份**的 `to_k(vl_embs)/to_v(vl_embs)`（常量输入×常量权重⇒输出恒定）；不可缓存 = Q/scores/self-attn/MLP/adaLN；谱系 = prefill/decode + KV cache；镜像教训对照 §6.5——挪对侧常量是优化、挪错侧变量是事故，hoisting 的性质由数据流决定（已落 §6.7）。
+
+### 2026-09-24 · 课堂追问存档（四轮 · attention 全解 + 源码勘误）
+
+> 本轮从一句"请介绍 action head 中使用的 attention"出发，把整条 attention 链路读到最内层算子，
+> 顺带**推翻了课程前几章的三处旧口径**。正文产出：§6.8（含 `attn_flow.png` 流程图）+ §3/§4/§6.7 勘误
+> + 第 05 章 §2 勘误框与批注补录。
+
+- **Q11 "action head 里用的是哪种 attention"**：课上按"三个现场"讲（条件侧 self-attn / DiT cross-attn /
+  DiT self-attn），学生主动把话题接回三轮的 KV 缓存结论。产出 §6.8 全解与配图（维度/来源/用途/可缓存性一张图）。
+- **Q12 "cross 的 K/V 在一次 `get_action` 的 K 次迭代里恒定"再确认**：✔，但精确表述是
+  **一次 `get_action` 内算一次、缓存 8 层 ×(K,V)**，**不跨 `get_action` 复用**——新相机帧一到，
+  观测变 ⇒ 地图重画（§6.6 绘图师）。另精化三轮 Q10 的"L 层各一份"为"8/16 层"。
+- **[!] 考证推翻的三处旧口径**（已回写）：① `select_layer=12`（非 16）；② `project_to_dim=null`
+  ⇒ `eagle_linear` 是 `Identity`，交接张量是 **2048** 不是 1536（1536 属 head 内部 `input_embedding_dim`）；
+  ③ `tune_visual=true`：官方训练时**视觉塔在训**，"backbone 全冻结"只对语言塔成立。
+- **[!] 两处"与直觉不符"的开源实现事实**：④ 无 `future_tokens`（`sa_embs=[state|action]`，
+  config 里的 `num_target_vision_tokens=32` 无模块消费）；⑤ `backbone_attention_mask`
+  **传而不达**（DiT 下发 None + 块内参数被注释 ⇒ padding 也进 softmax，B=1 无害、batch 推理有隐患）。
+- **收编的方法论**：**"契约里有这个键" ≠ "这个键被消费"**——新增"掩码可达性检查"这一排雷动作，
+  与 §6.5 症状速查表配套使用。

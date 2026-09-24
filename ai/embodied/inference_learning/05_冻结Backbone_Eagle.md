@@ -35,6 +35,23 @@ class EagleBackbone(nn.Module):
 - `select_layer` 决定取**哪一层的 hidden state** 作为特征，并据此**裁剪**语言模型尾部层——少算。
 - `eagle_linear` 把 VLM 的高维特征（2048）投影到 action head 期望的维度（1536）。
 
+> **[!] 官方权重实测勘误（2026-09-24，读 `GR00T-N1_5-3B/config.json` + 开源 release 代码 `5e3ef5e` 校正）**
+> 上面这段伪代码写的是**类默认参数**下的形状，官方发布权重打开的是另一组开关，三处必须校正：
+>
+> | 项 | 伪代码/默认 | 官方 ckpt 实测 | 后果 |
+> |---|---|---|---|
+> | `select_layer` | `-1`（示例里 16） | **12** | 语言塔只留前 12 层，第 12 层 hidden state 即 `backbone_features` |
+> | `project_to_dim` | 1536（`nn.Linear(2048,1536)`） | **null** ⇒ `eagle_linear` = `nn.Identity()` | **2048 维一路直通**，backbone 侧根本不做投影 |
+> | `tune_visual` | False（示意「全冻」） | **True**（只有 `tune_llm=False`） | 训练期**视觉塔是可训练的**，冻结的只有语言塔 |
+>
+> 于是「1536」其实不在 backbone 里：它是 action head 的 `input_embedding_dim`
+> （= DiT `inner_dim` = 32 头 × 48），由 head 侧 `state_encoder / action_encoder`
+> 把 64 维 state / 32 维 action 翻译成 1536（见第 06 章 §6.8 维度账本）。
+> 换句话说：官方 N1.5 的 backbone 与 action head 之间流动的张量是 **[B, 296, 2048]**，
+> `eagle_linear` 这条「翻译官」线在发布权重上是**空通道**（`tune_projector=true` 训练的是
+> head 侧那几个投影件，不是这条）。**跨机对齐时视觉塔权重同样属于「必须与训练端逐字节一致」的部分**
+> （第 02 章 #168 / 第 13 章）——它并非如直觉那样「冻结所以无所谓」。
+
 ## 3. "冻结"是什么意思（`set_trainable_parameters`）
 
 ```python
@@ -45,6 +62,8 @@ def set_trainable_parameters(self, tune_llm, tune_visual):
                         self.eagle_model.mlp1.requires_grad_(False)            # 冻结视觉
 ```
 - `requires_grad_(False)`：这些参数的梯度不再计算、权重不更新 → "冻结"。
+  官方 N1.5 ckpt 的开关是 `tune_llm=false` + `tune_visual=true`（冻语言塔、留视觉塔参与训练）；
+  本章示例的双 `False` 是教学简化——推理期两种配置下所有模块都在 `eval()`，行为无差别。
 - 推理场景本来就不反向传播；**冻结**的真正意义是省显存/显式表达"不动它"。
 - 有个训练相关细节 `set_frozen_modules_to_eval_mode()`：HF 每次训练会 `model.train()`，
   但冻结模块要保持在 `eval()`（关掉 dropout/BatchNorm 的随机行为）——推理时整体就是 eval，无影响。
@@ -92,7 +111,8 @@ backbone 的输出**不直接是动作**，而是"世界的理解"，作为条�
 
 ## 6. 本章小结
 
-- Backbone = 冻结的 Eagle VLM + 一层线性投影（2048→1536）+ 层裁剪省算力。
+- Backbone = Eagle VLM（推理期整体 eval；官方训练配置只冻语言塔）+ 语言塔层裁剪（`select_layer=12`）
+  + 一个**在官方权重上退化为 Identity** 的投影（`project_to_dim=null`，2048 直通给 action head）。
 - 作用：把视频+语言变成 `backbone_features`（语义条件）。
 - 冻结即 `requires_grad_(False)`；推理下无梯度，天然轻量。
 - 输出 `backbone_features` + `backbone_attention_mask`，作为 action head 的条件输入。
@@ -185,14 +205,28 @@ backbone 的输出**不直接是动作**，而是"世界的理解"，作为条�
 
 | 本章机制（gr00t 案例） | 普遍原理（换任何 VLA 仍成立） |
 |---|---|
-| Eagle + `select_layer=16` 裁剪 | 理解 ≠ 生成：条件提取不必跑完为 next-token 调优的深层 LLM（pi0/RT-2 取中间层同款） |
+| Eagle + `select_layer=12`（官方 ckpt）裁剪 | 理解 ≠ 生成：条件提取不必跑完为 next-token 调优的深层 LLM（pi0/RT-2 取中间层同款） |
 | `eagle_` 前缀剥壳喂原生 VLM | 用命名空间约定实现模块松耦合，第三方权重零改动复用 |
 | `set_frozen_modules_to_eval_mode()` | 训练/推理一致性：冻结供应商的交货口径必须前后一致（与 #168 同族） |
 | `requires_grad_(False)` + 可训练 `eagle_linear` | 冻结主干 + 只训"翻译层"与任务头：省资源且防灾难性遗忘 |
-| 输出 `[B,T,1536]` 作条件 | VLA 的接缝在"语义特征"层，两边只靠形状+键名契约握手 |
+| 输出 `[B,T,2048]` 作条件（官方权重 Identity 直通） | VLA 的接缝在"语义特征"层，两边只靠形状+键名契约握手 |
 
 #### 遗留动手题
 
 打开真实 `eagle_backbone.py` 数一遍 `forward` 输出的键，与 `gr00t_n1.py::validate_data`
 交叉验证（本章笔记口径为两键：`backbone_features` / `backbone_attention_mask`，以真实代码为准）。
 
+---
+
+### 2026-09-24 · 源码 + 权重实测勘误（补录）
+
+第 06 章 §6.8 做 attention 全解时逐行核了开源 N1.5 head 与 `GR00T-N1_5-3B/config.json`，
+顺带把本章三处"按类默认参数写的"数字钉死（详见 §2 勘误框）：
+
+1. `select_layer` 官方为 **12**（本章正文原写 16）——语言塔被裁到 12 层，"取中间层当条件"比想象的更早；
+2. `project_to_dim=null` ⇒ `eagle_linear` 是 `Identity`，**backbone 到 head 的交接张量是 2048 维**，
+   1536 属于 head 内部（`input_embedding_dim` = DiT 32 头 × 48）；本章原先"投影 2048→1536"的
+   叙述仅适用于 `project_to_dim` 被显式设值的自建配置；
+3. `tune_visual=true`：**官方训练时视觉塔在训**，"backbone 全冻结"只对语言塔成立。
+   教学结论不变（推理期全 eval），但"换骨干只需重训 `eagle_linear`"这条要打折：
+   发布权重里那层根本不存在，可重训缓冲区实际落在 head 侧的 `state/action encoder + projector`。
