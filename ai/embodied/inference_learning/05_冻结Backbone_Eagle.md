@@ -35,7 +35,7 @@ class EagleBackbone(nn.Module):
 - `select_layer` 决定取**哪一层的 hidden state** 作为特征，并据此**裁剪**语言模型尾部层——少算。
 - `eagle_linear` 把 VLM 的高维特征（2048）投影到 action head 期望的维度（1536）。
 
-> **[!] 官方权重实测勘误（2026-09-24，读 `GR00T-N1_5-3B/config.json` + 开源 release 代码 `5e3ef5e` 校正）**
+> **[!] 官方权重实测勘误（2026-09-24，读 `GR00T-N1_5-3B/config.json` + 开源 tag `n1.5-release` 代码校正）**
 > 上面这段伪代码写的是**类默认参数**下的形状，官方发布权重打开的是另一组开关，三处必须校正：
 >
 > | 项 | 伪代码/默认 | 官方 ckpt 实测 | 后果 |

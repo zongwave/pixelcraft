@@ -131,10 +131,16 @@ actions = actions + dt * pred_velocity     # 欧拉法求解 ODE: dx/dt = veloci
   的旋钮。GR00T-N1.5 常用 4 步左右已经能出不错结果。
 - `@torch.no_grad()`：推理不求梯度，省显存、更快。
 
-> **[!] 与开源 N1.5 实码逐行对齐（2026-09-24，`flow_matching_action_head.py@5e3ef5e`）**
+> **[!] 与开源 N1.5 实码逐行对齐（2026-09-24，`flow_matching_action_head.py` @ tag `n1.5-release`）**
 > 上面的循环是**教学版骨架**，实码有三处差别，排雷时按实码为准：
-> ① **没有 `future_tokens`**——实码是 `sa_embs = torch.cat((state_features, action_features), dim=1)`，
->    Q 侧序列长 `T_q = N_s + 16`（config 里残留的 `num_target_vision_tokens=32` 在开源 head 中**无模块消费**）；
+> ① **`sa_embs` 是三段拼接，含 `future_tokens`**：
+>    `sa_embs = cat(state_features, future_tokens, action_features)`，
+>    `future_tokens = nn.Embedding(num_target_vision_tokens=32, 1536)` ⇒ `T_q = N_s + 32 + 16`；
+>    而且那行 `.expand(B,…)` 就写在去噪循环**内**（部署分支把它提到循环外，见 §6.7 附录）；
+>    **[!] 版本谱系坑（本条自身就被修正过一次，留作反面教材）**：`future_tokens` 是 NVIDIA 开源**之后**
+>    才补进 head 的——首个开源提交 `5e3ef5e`(2025-06-11) 是两参数版 `cat(state, action)`、无此模块；
+>    发布 tag **`n1.5-release` 才有**，官方 ckpt 也确实带 `action_head.future_tokens.weight`。
+>    **教训：读开源代码要对准与权重配套的 tag（`n1.5-release`），不能对准"首个开源提交"。**
 > ② `get_action` 调 `self.model(...)` 时**连 `encoder_attention_mask` 都没传**（训练 `forward` 传了，
 >    但同样被 `DiT.forward` 丢弃 → 详见 §6.8.5）；
 > ③ `t_cont = t / num_steps` 从 **0** 起算，K=4 时网络实际被查询的时刻是 `t ∈ {0, .25, .5, .75}`，
@@ -191,7 +197,7 @@ actions_1 = ε + (E[x|obs] − ε) = E[x|obs]    ← 正是回归头的 mode-ave
 | `action_encoder`(MultiEmbodimentActionEncoder) | 把"当前(噪声)动作轨迹 + 时间 t"编码成 token |
 | `action_decoder`(CategorySpecificMLP) | 把 DiT 输出解回动作空间 `(B, H, action_dim)` |
 | `DiT`(cross_attention_dit) | 扩散 transformer 主体，**16 层交替**：偶数层 cross（看观测）、奇数层 self（动作 token 互通气），细节见 §6.8 |
-| ~~`future_tokens`~~(nn.Embedding) | 可学习的"未来目标" token，辅助生成。**⚠️ 开源 N1.5 已无此模块**（见 §3 勘误①），旧版/内部版才有 |
+| `future_tokens`(nn.Embedding) | 32 个可学习 token，拼进 Q 侧序列（`T_q=N_s+32+16`），辅助生成。**⚠️ 只在 `n1.5-release` 及之后存在**，首个开源提交 `5e3ef5e` 无（见 §3 勘误①） |
 | `vl_self_attention` + `vlln`(LayerNorm) | 对 backbone 特征先做层归一化+自身注意力提炼 |
 | `position_embedding` | 给动作 token 加位置信息（顺序/时间） |
 
@@ -307,14 +313,60 @@ K+V × 8 层 ≈ **30 GFLOP/去噪步**；K=4 就是 ~119 GFLOP，缓存后只�
 > 镜像教训：§6.5 的事故（循环内编码挪出去）与本节的优化（常量 K/V 挪出去）动作相同，
 > 分野只有一个——**被挪的东西输入是否恒定**。hoisting 本身没有对错，性质由数据流分析决定。
 
+### 6.7 附录 · 部署核查：本节的优化在生产分支上做了没有？
+
+> 课堂追问"§6.7 在 v0.2 里实现了吗"的现场核查（2026-09-24，切 `Isaac-GR00T@v0.2` +
+> `groot_ops@v0.2` 逐行读，行号可点）。方法本身值得学：**判据只有一条——
+> `to_k/to_v` 的输出是否还在去噪循环内被重算**（缓存权重、缓存缓冲、缓存 `vl_embs` 都不算数）。
+
+**结论：前提全铺好，唯独那步投影没做。**
+
+| §6.7 要素 | v0.2 现状 | 证据 |
+|---|---|---|
+| `vl_embs` 一次算成、K 步共用 | ✔（原生与 NPU 两条路径都在循环外） | `flow_matching_action_head.py:352`（循环在 `:374`）；NPU 侧 `npu/action.py:1275`（循环在 `:1296`） |
+| 权重常驻设备 | ✔ | `NPULinear._w` / `._lpu()`（`action.py:96-131`） |
+| 缓冲常驻 | ✔ | `_ditbufs`，按形状 key 复用（`action.py:754-770`） |
+| 输入零拷贝复用 | ✔（单 Die 下 `_to_ln_input` 对已是 LPU-fp16 的 `vl_embs` 直接返回视图） | `action.py:79-90`、`evo_lpu.py:267-268` |
+| **`to_k/to_v` 投影提升到循环外** | ✘ **未做** | `action.py:743` 每次把 encoder 喂进 kernel、`:746-747` 只取权重、`:752` `kv_from_nh1=0`、`:773` `dit_block_fused(...)`；kernel 侧 `dit_block_ffi.cc:145-146` 实参 = `encoder + wt_k + wt_v → out_k/out_v`，**无 precompute/skip 开关** |
+
+净账：一次 `get_action` = 4 步 × 8 cross 层 × 2 投影 = **64 次 K/V 投影，其中 48 次是白算**。
+
+**有意思的旁证——同一族优化，他们做了另外两处，恰好绕开了观测侧：**
+
+- **时间侧已做（#173）**：按 `ts` 缓存 AdaLN 的 `scale_shift` 常驻设备，注释原话"跳过每调用
+  9.4MB 权重搬运+matmul"（`action.py:234`、`819-821`）——这就是 §6.7 的思路，用在了 `temb` 上；
+- **host 侧已做（#152 O1）**：把 `state_features / future_tokens.expand / pos_embs` 提到去噪循环外
+  （`action.py:1275-1288`），消掉每步的 `arange` + 位置查表 + expand；
+- **观测侧（`vl_embs` 这条链）没走完**。⇒ 不是"没想到常量提升"，而是**数据流分析只走了一半**——
+  本节末"镜像教训"的活样本。
+
+**在这台 NPU 上到底值多少（按本节口径估，`kv_len=296` 参照）**：算力 ~30 GFLOP/去噪步、K=4 省 ~90 GFLOP；
+权重带宽 `wt_k+wt_v`=6.3MB×2×8 层 ≈ 100MB/步（4 步冗余 ~300MB）。
+⚠ 但**省不到 launch 数**：K/V gemm 早已折进"每 block 一次 FFI"，所以收益记在 device 时间与权重带宽两栏。
+而该部署的历史瓶颈画像（`to_lpu` 6148ms、`page_kv` 1691ms、每去噪步 ~0.53s）说明它的头号货币曾是
+**host 往返而非 FLOPs**——这解释了为什么 v0.2 的优先级给了 `unified_mha` 消 `page_kv`，
+本条属"正确但非当期瓶颈"。**性能优化的排序也是数据流分析的一部分。**
+
+**要落地，三个必踩的坑（第 09 章会真做）**：
+
+1. **布局**：kernel 约定 `out_k=[M_kv,N_k]`、`out_v=[N_q,M_kv]`（`dit_block_ffi.cc:215-218`）——
+   **V 是转置布局**，预计算必须产出同布局，否则 `QK^T` 静默错位（§6.5 那种"MSE 只偏高一点"的安静错误）；
+2. **必须改 kernel**：gemm 在设备侧，host 上少传一次参数省不掉任何东西 → 需加 `kv_from_nh1=2`
+   （precomputed）语义；
+3. **守卫照抄 #152 的反例**：那次 hoisting 把 `pos_ids` 行数误取成 state 行数，
+   `right_arm/left_hand` 的 cos 掉到 0.97/0.82，由 `d34a44f` 修复（**提错对象的真实代价，
+   与 §6.5 是同一种事故**）。缓存 key 至少含 `vl_embs` 的 `data_ptr + shape + dtype`，
+   并用现成 golden 门（`deployment_scripts/npu/cos_check.py`，口径 0.99999）做 A/B。
+
 ## 6.8 Action Head 的 Attention 全解（源码考证版）
 
-> 材料：开源 release（commit `5e3ef5e`）的 `flow_matching_action_head.py` + `cross_attention_dit.py`，
+> 材料：开源 tag **`n1.5-release`**（**不是**首个开源提交 `5e3ef5e`，差别见 §3 勘误①）的
+> `flow_matching_action_head.py` + `cross_attention_dit.py`，
 > 与官方 `GR00T-N1_5-3B/config.json` 交叉核对（2026-09-24 课堂追问"请介绍 action head 中使用的 attention"）。
 > **本节数字全部是 ckpt 实测值，不是类默认参数**；配图可复跑：`python3 tools/mk_fig_ch06_attn_flow.py`。
 
 ![action head 的 attention 流程：维度 / 来源 / 用途 / 可缓存性](images/ch06/attn_flow.png)
-*图：三条流——**绿=条件流**（K 步恒定，可缓存）、**橙=草稿流**（每个去噪步都变）、**蓝=时间流**；**紫=掩码链路**（实核结论：传而不达，见 §6.8.5）。右框是 16 层 DiT 的交替结构：蓝色=看观测的 cross 层，橙色=动作 token 互通气的 self 层。*
+*图：三条流——**绿=条件流**（K 步恒定，可缓存）、**橙=草稿流**（每个去噪步都变）、**蓝=时间流**；**紫=掩码链路**（实核结论：传而不达，见 §6.8.5）。右框是 16 层 DiT 的交替结构：蓝色=看观测的 cross 层，橙色=动作 token 互通气的 self 层。 版本口径：按发布 tag `n1.5-release`（首个开源提交 `5e3ef5e` 无 `future_tokens`，别拿它当基准，见 §3 勘误①）。*
 
 ### 6.8.1 一次 `get_action` 里同时存在三个 attention 现场
 
@@ -347,7 +399,7 @@ out = to_out(A)                            # [B, N_q, 1536]，随后走残差 + 
 
 - **K/V 的输入是 2048 而不是 1536**（`cross_attention_dim=2048`）：backbone 侧 `project_to_dim=null`
   是 Identity 直通（第 05 章勘误），**降维只发生在 `to_k/to_v` 这一刀**；
-- **注意力矩阵极小**：`N_q × N_kv ≈ 30 × 296`。这套 attention 的成本**不在 `QK^T`，而在 K/V 那两个
+- **注意力矩阵极小**：`N_q × N_kv ≈ 49 × 296`。这套 attention 的成本**不在 `QK^T`，而在 K/V 那两个
   `296 × 2048 × 1536` 的投影**（§6.7 那笔 ~90 GFLOP 就从这里来）。气质上它是
   **"短查询查长条件"**，与 LLM 的"长查询查长历史"相反——所以 LLM 那套 flash/paged 优化的重心在这里要换位置；
 - DiT 内部**恒为 1536**，出口才被 `proj_out_2` 降到 `output_dim=1024`。
@@ -369,7 +421,7 @@ out = to_out(A)                            # [B, N_q, 1536]，随后走残差 + 
 - ckpt 里 `positional_embeddings = null`（DiT 与 `vl_self_attention` 都是）⇒ `BasicTransformerBlock.pos_embed = None`，
   **块内没有任何位置编码**；
 - 顺序全靠 head 的**可学习** `position_embedding = nn.Embedding(max_seq_len=1024, 1536)`，
-  且 `pos_ids = arange(action_features.shape[1])` —— **只加在 16 个动作 token 上，state token 一个都不加**；
+  且 `pos_ids = arange(action_features.shape[1])` —— **只加在 16 个动作 token 上，state 与 32 个 future token 一个都不加**（future token 靠自身可学习权重区分身份，无位置概念）；
 - 没有因果掩码，动作 token 之间**双向可见**：扩散要的是"整段轨迹一起改写"，不是自回归逐 token
   （对照第 05 章 LLM 侧的因果掩码，那是两种生成范式的指纹）；
 - 推论：cross-attention 里的 296 个条件 token **没有任何位置概念**，图像块/词的顺序感只能由
@@ -405,7 +457,7 @@ out = to_out(A)                            # [B, N_q, 1536]，随后走残差 + 
 | 条件流 | `vl_embs` | `[B,296,2048]` | 一次 `get_action` 内恒定 ⇒ K/V 可缓存 |
 | state | 64 → 1024 → 1536 | `[B,N_s,1536]` | `CategorySpecificMLP`（本体私有） |
 | action | 32 → 1536 | `[B,16,1536]` | `MultiEmbodimentActionEncoder`（+t 桶 +可学习 pos） |
-| 草稿流 | `cat(state, action)` | `[B,T_q=N_s+16,1536]` | **无** future_tokens |
+| 草稿流 | `cat(state, future(32), action)` | `[B,T_q=N_s+32+16,1536]` | `future_tokens` 32 个（ckpt 带权重；首发布 `5e3ef5e` 无） |
 | DiT × 16 | 1536 → 1536 | cross 层 KV：2048→1536 | 32×**48**；每层 AdaLN(norm1) + FF(GEGLU, inner=4×) |
 | DiT 出口 | 1536 → **1024** | `[B,T_q,1024]` | `proj_out_1` 调制 + `proj_out_2(output_dim=1024)` |
 | 动作头 | 1024 → 1024 → 32 | `[B,T_q,32]` 取 `[-16:]` | `CategorySpecificMLP` → 速度场 `v [B,16,32]` |
@@ -417,7 +469,9 @@ out = to_out(A)                            # [B, N_q, 1536]，随后走残差 + 
 
 | 版本 | attention 结构 | 备注 |
 |---|---|---|
-| **N1.5**（本章，开源） | `cross_attention_dit.py`：16 层 interleave，偶 cross / 奇 self | 本节结论全部适用 |
+| N1.5 首发布 `5e3ef5e` | 同上骨架，但 `sa_embs=cat(state, action)`（无 future_tokens） | **别拿它当"N1.5 开源代码"**，与发布权重不配套 |
+| **N1.5**（本章 = tag `n1.5-release`） | `cross_attention_dit.py`：16 层 interleave，偶 cross / 奇 self；`sa_embs` 三段拼接 | 本节结论全部适用 |
+| 内网部署分支（`groot_ops` v0.1–v0.4，NPU/LPU） | 同一 `n1.5-release` 架构 + `transformers_npu` 补丁把每层换成融合算子 | 见 §6.7 附录（含 interleave 分支在 `npu_dit_forward` 里被复刻） |
 | N1.6 / N1.7 | 新线 `gr00t/model/modules/dit.py`，同一 interleave 骨架 | 见第 12 章版本演进 |
 | N1.7 另有 `AlternateVLDiT` | 图/文条件**交替且稀疏**进 cross（`attend_text_every_n_blocks`） | "只有部分层看文本"的结构化省钱开关；用它的分支上，§6.7 的"可缓存 8/16"要按新的 cross 层数重算 |
 
@@ -426,7 +480,8 @@ out = to_out(A)                            # [B, N_q, 1536]，随后走残差 + 
 - action head 用**流匹配/扩散**：学一个"速度场"，从噪声还原动作 → 支持多模态动作。
 - 训练：`noisy=(1-t)ε+t·x`，目标 `velocity=x-ε`，MSE 损失。
 - 推理：从随机噪声出发，`num_steps` 步欧拉积分去噪，得到 `action_pred`。
-- 全程无梯度（`@torch.no_grad()`）；`denoising_steps` 是质量/延迟旋钮。
+- 全程无梯度（`@torch.no_grad()`）；`denoising_steps` 是质量/延迟旋钮；
+  "什么能提出去噪循环"由数据流决定（§6.5 事故 vs §6.7 优化），生产分支 v0.2 的落地核查见 §6.7 附录。
 - category-specific 权重实现"一个模型多种机器人本体"。
 - attention 有三个现场（条件侧 self / DiT cross / DiT self）；**16 层 DiT 只有 8 层 cross**（才谈得上缓存那 8 份 K/V）；
   块内无位置编码，顺序靠 head 的可学习 `position_embedding`（只加在动作 token 上）；
@@ -528,5 +583,27 @@ out = to_out(A)                            # [B, N_q, 1536]，随后走残差 + 
 - **[!] 两处"与直觉不符"的开源实现事实**：④ 无 `future_tokens`（`sa_embs=[state|action]`，
   config 里的 `num_target_vision_tokens=32` 无模块消费）；⑤ `backbone_attention_mask`
   **传而不达**（DiT 下发 None + 块内参数被注释 ⇒ padding 也进 softmax，B=1 无害、batch 推理有隐患）。
+  > **【更正 · 同日五轮】上面 ④ 作废**：那是读了**首个开源提交 `5e3ef5e`** 的结论，发布 tag
+  > `n1.5-release` 与官方 ckpt **都有** `future_tokens`（32 个）。⑤ 已在 `n1.5-release` 上复核，**结论不变**。
+  > 教训入档：**"读开源代码"第一步是 `git tag --contains <commit>` 确认自己读的是与权重配套的那个版本。**
 - **收编的方法论**：**"契约里有这个键" ≠ "这个键被消费"**——新增"掩码可达性检查"这一排雷动作，
   与 §6.5 症状速查表配套使用。
+
+### 2026-09-24 · 课堂追问存档（五轮 · 生产分支落地核查 + 一次自我更正）
+
+- **Q13 "§6.7 的跨去噪步 KV 缓存，在 v0.2 里实现了吗"**：现场切 `Isaac-GR00T@v0.2` + `groot_ops@v0.2`
+  逐行核查，答案 **没有**（`dit_block_fused` 每次仍收 `encoder + wt_k/wt_v`，kernel 内照算 K/V；
+  一次 `get_action` 64 次 K/V 投影里 48 次白算）。但同族优化在**时间侧（#173 AdaLN scale_shift）
+  与 host 侧（#152 O1 提 state/future/pos）都已落地**——数据流分析只走了半程。
+  完整判据表、量化、三个落地坑 → 已升为正文 **§6.7 附录**。
+- **Q14 附带发现（自我更正）**：`future_tokens` 的真实状态是"**开源后才补进 head**"：
+  `5e3ef5e`（2025-06-11 首发布，两参数 `cat(state, action)`）→ `n1.5-release`（三参数 + 32 token，
+  ckpt 带 `action_head.future_tokens.weight`）。四轮存档的 ④ 已标注作废，§3 勘误①/§4 部件表/
+  §6.8.2/§6.8.4/§6.8.6/§6.8.7 全部改回 `T_q = N_s + 32 + 16`。
+  其余三条勘误来自 ckpt `config.json` 实测、不受代码版本影响；`encoder_attention_mask` 传而不达
+  已在 `n1.5-release` 复核（`:172` 注释 + `:286/:294` 下发 None + `get_action` 未传）→ **不变**。
+- **收编的方法论（本轮最值钱的一条）**：**版本谱系也是契约的一部分。**
+  同一条"读源码求证"的动作，读错版本就会把结论写反——考证三问：
+  ① 这份代码与我要复现的**权重**是否同一 tag？（`git tag --contains`）
+  ② 我引的是**默认参数**还是 **ckpt 实测值**？（select_layer / project_to_dim 之辨）
+  ③ 我读的是**发布分支**还是**某个人的 dev 分支**？（v0.2 与 `dev_wzong_review170_euler_tail` 差一整条 euler_tail 线）

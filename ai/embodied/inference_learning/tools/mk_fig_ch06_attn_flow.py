@@ -3,7 +3,8 @@
 
 依据 2026-09-24 实测：官方 GR00T-N1_5-3B config + 开源 release 代码(5e3ef5e)：
 vl 侧 2048（project_to_dim=null）；DiT 16 层 interleave（偶 cross/奇 self）32头x48=1536；
-vl_self_attention 4 层 32x64；num_inference_timesteps=4；sa_embs=[state|action]。
+vl_self_attention 4 层 32x64；num_inference_timesteps=4；
+sa_embs=[state|future(32)|action]（tag n1.5-release，非首发布 5e3ef5e）。
 生成：images/ch06/attn_flow.png
 用法：python3 tools/mk_fig_ch06_attn_flow.py
 """
@@ -69,7 +70,7 @@ ax.text(38.5, 73.2, "mask", fontsize=5.5, color=PURPLE)
 box(2, 44, 16, 9, "动作草稿 x_k\n[B,16,32]", "k=0 纯噪声, k>0 上步Euler", fc=BG_O, ec=ORANGE, sfs=5.4)
 box(22, 43, 26, 11, "action_encoder(+t桶)\nMultiEmbodiment(本体私有)", "16x32 -> 16 token, 1536", fc=BG_O, ec=ORANGE)
 box(52, 44, 16, 9, "+pos_embedding\n(可学习)", "DiT块内无位置编码", fc=BG_O, ec=ORANGE)
-box(72, 43.5, 40, 10, "sa_embs = [state | action]\n[B, T_q=N_s+16, 1536]", "开源 N1.5 无 future_tokens", fc=BG_O, ec=ORANGE)
+box(72, 43.5, 40, 10, "sa_embs = [state | future(32) | action]\n[B, T_q=N_s+32+16, 1536]", "future = 32 个可学习 token(按 tag n1.5-release)", fc=BG_O, ec=ORANGE)
 box(22, 30, 16, 8, "state\n[B,N_s,d]", "关节角等本体传感", fc=BG_O, ec=ORANGE, fs=7)
 box(42, 30, 22, 8, "state_encoder\nMLP(本体私有)", "state 投成 N_s 个 1536", fc=BG_O, ec=ORANGE, fs=7)
 for x1, x2 in [(18, 21.5), (48, 51.5), (68, 71.5)]:
