@@ -347,9 +347,9 @@ K+V × 8 层 ≈ **30 GFLOP/去噪步**；K=4 就是 ~119 GFLOP，缓存后只�
 **host 往返而非 FLOPs**——这解释了为什么 v0.2 的优先级给了 `unified_mha` 消 `page_kv`，
 本条属"正确但非当期瓶颈"。**性能优化的排序也是数据流分析的一部分。**
 
-**要落地，三个必踩的坑（第 09 章会真做）**：
+**要落地，三个必踩的坑（对账见第 09 章 §7，实现至今未落地）**：
 
-1. **布局**：kernel 约定 `out_k=[M_kv,N_k]`、`out_v=[N_q,M_kv]`（`dit_block_ffi.cc:215-218`）——
+1. **布局**：kernel 约定 `out_k=[M_kv,N_k]`、`out_v=[N_q,M_kv]`（`dit_block_ffi.cc:214-219`）——
    **V 是转置布局**，预计算必须产出同布局，否则 `QK^T` 静默错位（§6.5 那种"MSE 只偏高一点"的安静错误）；
 2. **必须改 kernel**：gemm 在设备侧，host 上少传一次参数省不掉任何东西 → 需加 `kv_from_nh1=2`
    （precomputed）语义；
@@ -357,6 +357,13 @@ K+V × 8 层 ≈ **30 GFLOP/去噪步**；K=4 就是 ~119 GFLOP，缓存后只�
    `right_arm/left_hand` 的 cos 掉到 0.97/0.82，由 `d34a44f` 修复（**提错对象的真实代价，
    与 §6.5 是同一种事故**）。缓存 key 至少含 `vl_embs` 的 `data_ptr + shape + dtype`，
    并用现成 golden 门（`deployment_scripts/npu/cos_check.py`，口径 0.99999）做 A/B。
+
+**后续（2026-09-24）**：上面三条坑已在**第 09 章 §7** 逐条按到 v0.2 kernel 实参表上对账
+（8 条第 06 章结论 7 条印证，唯本条未落地）。对账时新增一条**本节没有预见的副作用**：
+v0.2 把整个 DiT block 收成一次 `torch_evo.dit_block_fused`（`action.py:773`）之后，
+这笔 K/V 白算被**吞进 FFI 内部**，不再出现在 profiler 的顶层算子表里——
+**从"可见的慢"变成"隐形的慢"**。推论：优化被"融合"吞掉之后，可观测性也要跟着下沉一层
+（看 `GROOT_NPU_DIT_BLOCK_FUSED=0` 的 A/B 差值，而不是看顶层算子名）。
 
 ## 6.8 Action Head 的 Attention 全解（源码考证版）
 

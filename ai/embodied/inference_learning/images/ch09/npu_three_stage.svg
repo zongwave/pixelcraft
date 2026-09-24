@@ -1,0 +1,110 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1560" height="1036" viewBox="0 0 1560 1036" font-family="Helvetica, Arial, 'Noto Sans CJK SC', 'WenQuanYi Zen Hei', sans-serif">
+<defs><marker id="arr" markerWidth="10" markerHeight="10" refX="7" refY="3" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L8,3 L0,6 Z" fill="#555"/></marker></defs>
+<rect x="0" y="0" width="1560" height="1360" rx="8" fill="#fcfcfc" stroke="none" stroke-width="1.6"/>
+<text x="780.0" y="40" font-size="23" font-weight="bold" fill="#222" text-anchor="middle">NPU 融合算子怎么接进 gr00t：三级入口时间轴（Isaac-GR00T v0.2 + groot_ops v0.2）</text>
+<text x="780.0" y="65" font-size="13" font-weight="normal" fill="#666" text-anchor="middle">空间分层栈见 npu_patch_framework.svg（n1.6 视角）；本图回答的是「何时做哪一步」——接入 = 换叶子 + 守布局，三步各有一个静默失效点</text>
+<line x1="60" y1="108" x2="1500" y2="108" stroke="#999" stroke-width="2.2" marker-end="url(#arr)"/>
+<circle cx="170" cy="108" r="8" fill="#1f6feb"/>
+<text x="170" y="88" font-size="15" font-weight="bold" fill="#1f6feb" text-anchor="middle">T0 安装 / 绑定期</text>
+<text x="170" y="136" font-size="12" font-weight="normal" fill="#777" text-anchor="middle">import 期 · from_pretrained 之前 · 一次</text>
+<circle cx="700" cy="108" r="8" fill="#b9770e"/>
+<text x="700" y="88" font-size="15" font-weight="bold" fill="#b9770e" text-anchor="middle">T1 权重期</text>
+<text x="700" y="136" font-size="12" font-weight="normal" fill="#777" text-anchor="middle">load_state_dict 后 · 首次 forward 懒触发</text>
+<circle cx="1230" cy="108" r="8" fill="#1e8449"/>
+<text x="1230" y="88" font-size="15" font-weight="bold" fill="#1e8449" text-anchor="middle">T2 前向期</text>
+<text x="1230" y="136" font-size="12" font-weight="normal" fill="#777" text-anchor="middle">每次 get_action · 每个被换的叶子</text>
+<rect x="30" y="150" width="1500" height="192" rx="12" fill="#ffffff" stroke="#1f6feb" stroke-width="2"/>
+<rect x="30" y="150" width="8" height="192" rx="0" fill="#eaf2fd" stroke="#eaf2fd" stroke-width="0"/>
+<text x="56" y="177" font-size="17" font-weight="bold" fill="#1a5fb4" text-anchor="start">① 安装/绑定期</text>
+<text x="1504" y="177" font-size="12.5" font-weight="normal" fill="#8a8a8a" text-anchor="end">gr00t/transformers_npu/{__init__,patch,register}.py</text>
+<rect x="54.0" y="194" width="343.5" height="132" rx="8" fill="#eaf2fd" stroke="#1f6feb" stroke-width="1.5"/>
+<text x="68.0" y="218" font-size="13.5" font-weight="bold" fill="#1a5fb4" text-anchor="start">install() 只有五步  __init__.py:29-33</text>
+<text x="68.0" y="240" font-size="12" font-weight="normal" fill="#3a3a3a" text-anchor="start">init_lpu → register_all → apply_patches</text>
+<text x="68.0" y="259" font-size="12" font-weight="normal" fill="#3a3a3a" text-anchor="start">→ _verify_patch_bindings → auto_report</text>
+<text x="68.0" y="278" font-size="12" font-weight="normal" fill="#3a3a3a" text-anchor="start">入口二 hijack_policy_load：包住 _load_model</text>
+<text x="68.0" y="297" font-size="12" font-weight="normal" fill="#3a3a3a" text-anchor="start">红线：晚于 from_pretrained ⇒ 静默走原生链</text>
+<rect x="423.5" y="194" width="343.5" height="132" rx="8" fill="#eaf2fd" stroke="#1f6feb" stroke-width="1.5"/>
+<text x="437.5" y="218" font-size="13.5" font-weight="bold" fill="#1a5fb4" text-anchor="start">两种替换语义  register.py:6-8</text>
+<text x="437.5" y="240" font-size="12" font-weight="normal" fill="#3a3a3a" text-anchor="start">「M.Cls」整类替换（Qwen3Attention）</text>
+<text x="437.5" y="259" font-size="12" font-weight="normal" fill="#3a3a3a" text-anchor="start">「M.Cls.method」方法包装（get_action）</text>
+<text x="437.5" y="278" font-size="12" font-weight="normal" fill="#3a3a3a" text-anchor="start">函数名尾缀 wrapper/decorator ⇒ 叠加装饰</text>
+<text x="437.5" y="297" font-size="12" font-weight="normal" fill="#3a3a3a" text-anchor="start">apply 前须先 import 目标模块进 sys.modules</text>
+<rect x="793.0" y="194" width="343.5" height="132" rx="8" fill="#eaf2fd" stroke="#1f6feb" stroke-width="1.5"/>
+<text x="807.0" y="218" font-size="13.5" font-weight="bold" fill="#1a5fb4" text-anchor="start">from-import 传播  patch.py</text>
+<text x="807.0" y="240" font-size="12" font-weight="normal" fill="#3a3a3a" text-anchor="start">遍历 sys.modules，换掉所有 cur is orig</text>
+<text x="807.0" y="259" font-size="12" font-weight="normal" fill="#3a3a3a" text-anchor="start">否则 fm.SinusoidalPositionalEncoding 仍是旧类</text>
+<text x="807.0" y="278" font-size="12" font-weight="normal" fill="#3a3a3a" text-anchor="start">跳过 torch/builtins；remove_patches() 可回滚</text>
+<text x="807.0" y="297" font-size="12" font-weight="normal" fill="#3a3a3a" text-anchor="start">v0.2 登记 30 个目标（6+6+1+17）</text>
+<rect x="1162.5" y="194" width="343.5" height="132" rx="8" fill="#eaf2fd" stroke="#1f6feb" stroke-width="1.5"/>
+<text x="1176.5" y="218" font-size="13.5" font-weight="bold" fill="#1a5fb4" text-anchor="start">金丝雀 fail-fast  #149 / __init__.py:38-51</text>
+<text x="1176.5" y="240" font-size="12" font-weight="normal" fill="#3a3a3a" text-anchor="start">assert ae.SinusoidalPositionalEncoding is NPU_</text>
+<text x="1176.5" y="259" font-size="12" font-weight="normal" fill="#3a3a3a" text-anchor="start">assert fm.SinusoidalPositionalEncoding is NPU_</text>
+<text x="1176.5" y="278" font-size="12" font-weight="normal" fill="#3a3a3a" text-anchor="start">探针选小叶子：DiT 是方法包装，绑 orig 也「能跑」</text>
+<text x="1176.5" y="297" font-size="12" font-weight="normal" fill="#3a3a3a" text-anchor="start">退化症状：逐 op 现算链复活 ≈ +30 ms/轮 host</text>
+<rect x="30" y="364" width="1500" height="252" rx="12" fill="#ffffff" stroke="#b9770e" stroke-width="2"/>
+<rect x="30" y="364" width="8" height="252" rx="0" fill="#fff6e8" stroke="#fff6e8" stroke-width="0"/>
+<text x="56" y="391" font-size="17" font-weight="bold" fill="#9c5f00" text-anchor="start">② 权重期</text>
+<text x="1504" y="391" font-size="12.5" font-weight="normal" fill="#8a8a8a" text-anchor="end">ops/evo_lpu.py + npu/*._load_lpu()</text>
+<rect x="54.0" y="408" width="343.5" height="132" rx="8" fill="#fff6e8" stroke="#b9770e" stroke-width="1.5"/>
+<text x="68.0" y="432" font-size="13.5" font-weight="bold" fill="#9c5f00" text-anchor="start">权重上设备：懒 post-hook</text>
+<text x="68.0" y="454" font-size="12" font-weight="normal" fill="#3a3a3a" text-anchor="start">NPU_*._load_lpu()   qwen3.py:127/171/210/326</text>
+<text x="68.0" y="473" font-size="12" font-weight="normal" fill="#3a3a3a" text-anchor="start">NPULinear._lpu()     action.py:96-131</text>
+<text x="68.0" y="492" font-size="12" font-weight="normal" fill="#3a3a3a" text-anchor="start">rep_np [2,*] die 轴复刻 / to_lpu split0|1|2</text>
+<text x="68.0" y="511" font-size="12" font-weight="normal" fill="#3a3a3a" text-anchor="start">主链 fp16（evo_lpu.py:38）：bf16 无 split 互转</text>
+<rect x="423.5" y="408" width="343.5" height="132" rx="8" fill="#fff6e8" stroke="#b9770e" stroke-width="1.5"/>
+<text x="437.5" y="432" font-size="13.5" font-weight="bold" fill="#9c5f00" text-anchor="start">常量预计算（第 06 章「常量张量」）</text>
+<text x="437.5" y="454" font-size="12" font-weight="normal" fill="#3a3a3a" text-anchor="start">build_timestep_encoder :646（H2D 一次）</text>
+<text x="437.5" y="473" font-size="12" font-weight="normal" fill="#3a3a3a" text-anchor="start">timestep_encoder(ts) 按 (dev,d,ts) 只算一次</text>
+<text x="437.5" y="492" font-size="12" font-weight="normal" fill="#3a3a3a" text-anchor="start">build_adalayernorm :745（恒等 lnw/lnb 防 NaN）</text>
+<text x="437.5" y="511" font-size="12" font-weight="normal" fill="#3a3a3a" text-anchor="start">configure(ns,buckets) 预热 ⇒ 首轮起零 pe kernel</text>
+<rect x="793.0" y="408" width="343.5" height="132" rx="8" fill="#fff6e8" stroke="#b9770e" stroke-width="1.5"/>
+<text x="807.0" y="432" font-size="13.5" font-weight="bold" fill="#9c5f00" text-anchor="start">t 只有 4 个取值 ⇒ 命中率 100%</text>
+<text x="807.0" y="454" font-size="12" font-weight="normal" fill="#3a3a3a" text-anchor="start">num_inference_timesteps = 4（§6.5）</text>
+<text x="807.0" y="473" font-size="12" font-weight="normal" fill="#3a3a3a" text-anchor="start">temb / pe / AdaLN scale_shift 三个桶各 4 项常驻</text>
+<text x="807.0" y="492" font-size="12" font-weight="normal" fill="#3a3a3a" text-anchor="start">#173 省 9.4 MB/调用；pe 热路径零 kernel 发射</text>
+<text x="807.0" y="511" font-size="12" font-weight="normal" fill="#3a3a3a" text-anchor="start">_temb_l 按 id(temb) 缓存，免逐 block d2h + 重传</text>
+<rect x="1162.5" y="408" width="343.5" height="132" rx="8" fill="#fff6e8" stroke="#b9770e" stroke-width="1.5"/>
+<text x="1176.5" y="432" font-size="13.5" font-weight="bold" fill="#9c5f00" text-anchor="start">与封装层的摩擦点（03/04 章 × 09 章）</text>
+<text x="1176.5" y="454" font-size="12" font-weight="normal" fill="#3a3a3a" text-anchor="start">策略层加载后整模型 .to(device)，</text>
+<text x="1176.5" y="473" font-size="12" font-weight="normal" fill="#3a3a3a" text-anchor="start">把我们钉上 LPU 的 future_tokens 又拽回 CPU</text>
+<text x="1176.5" y="492" font-size="12" font-weight="normal" fill="#3a3a3a" text-anchor="start">它不认识「设备常驻」这个概念</text>
+<text x="1176.5" y="511" font-size="12" font-weight="normal" fill="#3a3a3a" text-anchor="start">修法：进 cat 前再钉一次  action.py:1257-1263</text>
+<rect x="54" y="554" width="1452" height="46" rx="6" fill="#f7f7f7" stroke="#bbb" stroke-width="1.4"/>
+<text x="70" y="575" font-size="12.5" font-weight="normal" fill="#333" text-anchor="start">权重侧结论：权重全部已常驻（首 forward 懒缓存，功能等价 vllm 的 load 时统一预处理）。真正 per-forward 的 host 大头不在权重，而在激活布局与 k/v 重排：</text>
+<text x="70" y="594" font-size="12.5" font-weight="normal" fill="#333" text-anchor="start">to_lpu 1919 次 · rep_from 606 · rep_np 211 · page_kv(host)+to_np 各 214　—— docs/reference/gr00t_npu_weight_preproc_map.md §2</text>
+<rect x="30" y="638" width="1500" height="252" rx="12" fill="#ffffff" stroke="#1e8449" stroke-width="2"/>
+<rect x="30" y="638" width="8" height="252" rx="0" fill="#eef8f0" stroke="#eef8f0" stroke-width="0"/>
+<text x="56" y="665" font-size="17" font-weight="bold" fill="#16693a" text-anchor="start">③ 前向期</text>
+<text x="1504" y="665" font-size="12.5" font-weight="normal" fill="#8a8a8a" text-anchor="end">npu/{qwen3,siglip,eagle,attention,action}.py → torch_evo.*</text>
+<rect x="54.0" y="682" width="343.5" height="132" rx="8" fill="#eef8f0" stroke="#1e8449" stroke-width="1.5"/>
+<text x="68.0" y="706" font-size="13.5" font-weight="bold" fill="#16693a" text-anchor="start">backbone 落到哪个 kernel</text>
+<text x="68.0" y="728" font-size="12" font-weight="normal" fill="#3a3a3a" text-anchor="start">SigLIP: conv2d_patch_embed / LN / MLP</text>
+<text x="68.0" y="747" font-size="12" font-weight="normal" fill="#3a3a3a" text-anchor="start">Qwen3 : gemm_norm_rope（QKV+qk_norm+RoPE 一次）</text>
+<text x="68.0" y="766" font-size="12" font-weight="normal" fill="#3a3a3a" text-anchor="start">        + qwen3_attention · gemm_bias(o_proj)</text>
+<text x="68.0" y="785" font-size="12" font-weight="normal" fill="#3a3a3a" text-anchor="start">Eagle : mlp1(1152→2048) → NPULinear</text>
+<rect x="423.5" y="682" width="343.5" height="132" rx="8" fill="#eef8f0" stroke="#1e8449" stroke-width="1.5"/>
+<text x="437.5" y="706" font-size="13.5" font-weight="bold" fill="#16693a" text-anchor="start">action head 落到哪个 kernel</text>
+<text x="437.5" y="728" font-size="12" font-weight="normal" fill="#3a3a3a" text-anchor="start">Encoder: gemm_bias(W1) + mlp_silu    :1196</text>
+<text x="437.5" y="747" font-size="12" font-weight="normal" fill="#3a3a3a" text-anchor="start">Decoder/state：CategorySpecificMLP → mlp_relu</text>
+<text x="437.5" y="766" font-size="12" font-weight="normal" fill="#3a3a3a" text-anchor="start">DiT block: torch_evo.dit_block_fused  :773</text>
+<text x="437.5" y="785" font-size="12" font-weight="normal" fill="#3a3a3a" text-anchor="start">尾调制 : dit_tail_modulate            :934</text>
+<rect x="793.0" y="682" width="343.5" height="132" rx="8" fill="#eef8f0" stroke="#1e8449" stroke-width="1.5"/>
+<text x="807.0" y="706" font-size="13.5" font-weight="bold" fill="#16693a" text-anchor="start">守卫即契约  action.py:703-736</text>
+<text x="807.0" y="728" font-size="12" font-weight="normal" fill="#3a3a3a" text-anchor="start">pos_embed is None / 无 residual_connection</text>
+<text x="807.0" y="747" font-size="12" font-weight="normal" fill="#3a3a3a" text-anchor="start">to_k.in == to_v.in == enc_dim；头维必须匹配</text>
+<text x="807.0" y="766" font-size="12" font-weight="normal" fill="#3a3a3a" text-anchor="start">n % 16 == 0；FFN 必须 plain-GELU（不是 GEGLU）</text>
+<text x="807.0" y="785" font-size="12" font-weight="normal" fill="#3a3a3a" text-anchor="start">任一不满足 ⇒ _r(原因) 静默回退分段路径</text>
+<rect x="1162.5" y="682" width="343.5" height="132" rx="8" fill="#eef8f0" stroke="#1e8449" stroke-width="1.5"/>
+<text x="1176.5" y="706" font-size="13.5" font-weight="bold" fill="#16693a" text-anchor="start">A/B 开关面板（27 个 GROOT_NPU_*）</text>
+<text x="1176.5" y="728" font-size="12" font-weight="normal" fill="#3a3a3a" text-anchor="start">DIT_BLOCK_FUSED / FUSED_FFN_NORM / AE_MLP</text>
+<text x="1176.5" y="747" font-size="12" font-weight="normal" fill="#3a3a3a" text-anchor="start">AD_MLP_RELU / GETACTION_O1 / SKIP_NOOP_*</text>
+<text x="1176.5" y="766" font-size="12" font-weight="normal" fill="#3a3a3a" text-anchor="start">ATTN_SINGLE / ATTN_CPU / PE_FFI / LN_BUF …</text>
+<text x="1176.5" y="785" font-size="12" font-weight="normal" fill="#3a3a3a" text-anchor="start">默认全 1；=0 就是「这一段退回非融合」的对照组</text>
+<rect x="54" y="828" width="1452" height="46" rx="6" fill="#f7f7f7" stroke="#bbb" stroke-width="1.4"/>
+<text x="70" y="849" font-size="12.5" font-weight="normal" fill="#333" text-anchor="start">粒度跃迁与发射账见 dit_fusion_granularity.svg（图 9-4）；kernel 的硬形状校验写在 dit_block_ffi.cc:205-225（错即 TVM_FFI_THROW，不静默算错）。</text>
+<rect x="30" y="912" width="1500" height="96" rx="6" fill="#fdecea" stroke="#c0392b" stroke-width="1.4"/>
+<text x="46" y="933" font-size="12.5" font-weight="normal" fill="#8e2b21" text-anchor="start">三条红线（任一违反都不报错，只是慢或算错）：</text>
+<text x="46" y="952" font-size="12.5" font-weight="normal" fill="#8e2b21" text-anchor="start">① 时序：install() 必须早于 from_pretrained()——晚一步类被换了、实例没换，静默走原生路径。</text>
+<text x="46" y="971" font-size="12.5" font-weight="normal" fill="#8e2b21" text-anchor="start">② dtype：主链 fp16 不是审美选择——bf16 下设备端 split0↔split1 互转不可用（evo_lpu.py:12-15），bf16 只在最外边界与模型对齐。</text>
+<text x="46" y="990" font-size="12.5" font-weight="normal" fill="#8e2b21" text-anchor="start">③ 布局：单 Die 必须用 INIT_SINGLE_DIE 初始化，否则 plain 布局直接出垃圾（docs/records/gr00t_npu_precision_localization.md §20）。</text>
+</svg>

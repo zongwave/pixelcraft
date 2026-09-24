@@ -61,7 +61,7 @@ class SVG:
 
 s = SVG()
 s.rect(0, 0, W, H, "#fafafa", "none")
-s.text(W / 2, 42, "gr00t e2e infer Pipeline：原生 PyTorch 逐算子  vs  E200 NPU 融合算子（最终交付）", 24, bold=True, anchor="middle")
+s.text(W / 2, 42, "gr00t e2e infer Pipeline：原生 PyTorch 逐算子  vs  E200 NPU 融合算子（v0.2 交付口径）", 24, bold=True, anchor="middle")
 s.text(W / 2, 68, "单 Die · 数值来源：groot_ops CHANGELOG v0.1/v0.2 与 Redmine #162 板端实测（L20 交叉机 golden 比对）", 13, anchor="middle", color="#666")
 
 LX, RX, CW = 30, 800, 730   # 两列 x 与宽
@@ -124,7 +124,7 @@ s.text(LX + 45, 1110, "golden 比对 cos ≈ 0.99338（L20 原生 PyTorch 为参
 # ---------- 右列：NPU 融合算子 ----------
 y = 95
 s.rect(RX, y, CW, 1080, "#eafaf1", "#a9dfbf", 12, 2)
-s.text(RX + CW / 2, y + 32, "E200 NPU 融合算子 + 权重设备驻留（v0.1 → v0.2 最终交付）", 18, bold=True, anchor="middle", color="#1e8449")
+s.text(RX + CW / 2, y + 32, "E200 NPU 融合算子 + 权重设备驻留（v0.1 → v0.2 交付；标 [v0.4] 的 op 不在 v0.2 tag 内）", 18, bold=True, anchor="middle", color="#1e8449")
 y += 52
 y = s.box(RX + 25, y, CW - 50, ["输入：图像 ×N + 文本 + 本体 state"], "#fff", "#aaa8", lcolor="#333") + 14
 s.arrow(RX + CW / 2, y - 14, RX + CW / 2, y + 2); y += 4
@@ -147,8 +147,8 @@ s.rect(RX + 20, y, CW - 40, 470, "#f4fdf6", "#82c99b", 10, 1.8)
 s.text(RX + CW / 2, y + 26, "Action Head（DiT flow-matching · get_action）", 15, bold=True, anchor="middle", color="#1e8449")
 y2 = y + 40
 y2 = s.box(RX + 45, y2, CW - 230, [
-    "initial noise：设备侧 randn_normal（#161）",
-    "免 CPU randn + 同步 H2D"], "#d5f5e3", "#27ae60", lcolor="#145a32") + 12
+    "initial noise：torch.randn(device=lpu)　action.py:1292",
+    "[v0.4] 设备侧 randn_normal 算子（#161）免这次 H2D"], "#d5f5e3", "#27ae60", lcolor="#145a32") + 12
 s.arrow(RX + CW / 2 - 60, y2 - 12, RX + CW / 2 - 60, y2 + 2); y2 += 6
 
 yb_h = s.box(RX + CW - 175, y + 40, 140, [
@@ -158,12 +158,12 @@ s.arrow(RX + CW - 105, (y + 40) + yb_h - y - 40, RX + CW - 105, y + 460, "#1e844
 y2 = s.box(RX + 45, y2, CW - 230, [
     "4×Euler × 16 DiT 层 · 每层 3 个大融合：",
     "adaln_qkv（norm+QKV）+ fused_mha_out（attn+o_proj）",
-    "+ mlp_gelu_norm（norm+FFN+gelu）"], "#d5f5e3", "#27ae60", lcolor="#145a32") + 12
+    "+ mlp_gelu_norm（norm+FFN+gelu）；单 Die 再合成 1 次 dit_block_fused"], "#d5f5e3", "#27ae60", lcolor="#145a32") + 12
 s.arrow(RX + CW / 2 - 60, y2 - 12, RX + CW / 2 - 60, y2 + 2); y2 += 6
 
 y2 = s.box(RX + 45, y2, CW - 230, [
-    "头 dit_action_head（2 次发射，tau 折入 bias，消 cat/swish）",
-    "尾 dit_action_tail（1 次发射，含 Euler：macc scale-add）"], "#d5f5e3", "#27ae60", lcolor="#145a32") + 14
+    "头 action_encoder：gemm_bias(W1) + mlp_silu　｜　尾 decoder：mlp_relu",
+    "[v0.4] dit_action_head / dit_action_tail / euler_tail 再收成 3 次"], "#d5f5e3", "#27ae60", lcolor="#145a32") + 14
 
 s.rect(RX + 40, y2, CW - 80, 74, "#fff", "#1e8449", 8, 1.6)
 s.text(RX + CW / 2, y2 + 22, "效果：contiguous −88% · permute −93% · to_head_major_k 963 → 0", 13, bold=True, anchor="middle", color="#1e8449")
@@ -175,10 +175,10 @@ y2 = s.box(RX + 45, y2, CW - 230, ["action_pred"], "#eaf0fa", "#8da9d8", lcolor=
 s.rect(RX + 25, 1010, CW - 50, 130, "#fff", "#1e8449", 8, 1.6)
 s.text(RX + 45, 1035, "指标（step1 稳态，单 Die）", 14, bold=True, color="#1e8449")
 s.text(RX + 45, 1060, "e2e 0.826 → 0.697（v0.1）→ 0.14 s 稳态（−83%，5.9×）　·　device busy 51%（87/171ms）", 13, color="#145a32")
-s.text(RX + 45, 1085, "融合算子主导：adaln_qkv / fused_mha_out / mlp_gelu_norm / mlp_swiglu / dit_action_head|tail", 13, color="#145a32")
+s.text(RX + 45, 1085, "融合算子主导（v0.2 的 30 个 op）：adaln_qkv / fused_mha_out / mlp_gelu_norm / mlp_swiglu / dit_block", 13, color="#145a32")
 s.text(RX + 45, 1110, "golden 比对 cos 0.99999+（n1.6 达 0.9999999，逐位一致验证）", 13, color="#145a32")
 
-s.text(W / 2, 1195, "参考：Redmine #162/#170 · groot_ops CHANGELOG v0.1/v0.2 · Isaac-GR00T docs/performance/gr00t_npu_*.md", 12, anchor="middle", color="#888")
+s.text(W / 2, 1195, "参考：Redmine #162/#170 · groot_ops CHANGELOG v0.1/v0.2 · Isaac-GR00T docs/performance/gr00t_npu_*.md　·　op 归属按 git ls-tree v0.1(24)/v0.2(30)/v0.4(36):ops/torch_ops 实测核对", 12, anchor="middle", color="#888")
 
 out = os.path.join(os.path.dirname(__file__), "..", "images", "ch09", "npu_pipeline_native_vs_fused.svg")
 with open(out, "w") as f:

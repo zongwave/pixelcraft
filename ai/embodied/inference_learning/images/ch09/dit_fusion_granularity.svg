@@ -1,0 +1,89 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1560" height="836" viewBox="0 0 1560 836" font-family="Helvetica, Arial, 'Noto Sans CJK SC', 'WenQuanYi Zen Hei', sans-serif">
+<defs><marker id="arr" markerWidth="10" markerHeight="10" refX="7" refY="3" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L8,3 L0,6 Z" fill="#555"/></marker></defs>
+<rect x="0" y="0" width="1560" height="1180" rx="0" fill="#fcfcfc" stroke="none" stroke-width="0"/>
+<text x="780.0" y="40" font-size="23" font-weight="bold" fill="#222" text-anchor="middle">一个 DiT block 的融合粒度阶梯：960 次发射 → 64 次，然后瓶颈搬家到 host 往返</text>
+<text x="780.0" y="65" font-size="13" font-weight="normal" fill="#666" text-anchor="middle">16 层 × 4 去噪步 = 64 个 block 执行。左=原生 aten；中=v0.1/v0.2 块内三融合；右=v0.2 单 Die 整块一次 FFI。列内已标注 op 属于哪个 tag。</text>
+<rect x="45" y="118" width="470" height="40" rx="8" fill="#fdecea" stroke="#c0392b" stroke-width="1.6"/>
+<text x="280.0" y="135" font-size="15" font-weight="bold" fill="#a3271d" text-anchor="middle">原生 PyTorch（H20 / aten 基线）</text>
+<text x="280.0" y="151" font-size="12" font-weight="normal" fill="#777" text-anchor="middle">≈15 次发射/层 → ≈960 次/轮</text>
+<rect x="555" y="118" width="470" height="40" rx="8" fill="#fff6e8" stroke="#b9770e" stroke-width="1.6"/>
+<text x="790.0" y="135" font-size="15" font-weight="bold" fill="#95590a" text-anchor="middle">块内三融合（groot_ops v0.1 → v0.2）</text>
+<text x="790.0" y="151" font-size="12" font-weight="normal" fill="#777" text-anchor="middle">3 次发射/层 → 192 次/轮</text>
+<rect x="1065" y="118" width="470" height="40" rx="8" fill="#eef8f0" stroke="#1e8449" stroke-width="1.6"/>
+<text x="1300.0" y="135" font-size="15" font-weight="bold" fill="#16693a" text-anchor="middle">整块一次 FFI（v0.2 单 Die）</text>
+<text x="1300.0" y="151" font-size="12" font-weight="normal" fill="#777" text-anchor="middle">1 次发射/层 → 64 次/轮</text>
+<rect x="45" y="176" width="470" height="26" rx="5" fill="#fff" stroke="#c9a29c" stroke-width="1.2"/>
+<text x="280.0" y="193.5" font-size="12.5" font-weight="normal" fill="#5c2a22" text-anchor="middle">LayerNorm</text>
+<rect x="45" y="207" width="470" height="26" rx="5" fill="#fff" stroke="#c9a29c" stroke-width="1.2"/>
+<text x="280.0" y="224.5" font-size="12.5" font-weight="normal" fill="#5c2a22" text-anchor="middle">linear to_q / to_k / to_v（3 次）</text>
+<rect x="45" y="238" width="470" height="26" rx="5" fill="#fff" stroke="#c9a29c" stroke-width="1.2"/>
+<text x="280.0" y="255.5" font-size="12.5" font-weight="normal" fill="#5c2a22" text-anchor="middle">matmul QK^T → softmax</text>
+<rect x="45" y="269" width="470" height="26" rx="5" fill="#fff" stroke="#c9a29c" stroke-width="1.2"/>
+<text x="280.0" y="286.5" font-size="12.5" font-weight="normal" fill="#5c2a22" text-anchor="middle">matmul softmax·V</text>
+<rect x="45" y="300" width="470" height="26" rx="5" fill="#fff" stroke="#c9a29c" stroke-width="1.2"/>
+<text x="280.0" y="317.5" font-size="12.5" font-weight="normal" fill="#5c2a22" text-anchor="middle">linear to_out[0]</text>
+<rect x="45" y="331" width="470" height="26" rx="5" fill="#fff" stroke="#c9a29c" stroke-width="1.2"/>
+<text x="280.0" y="348.5" font-size="12.5" font-weight="normal" fill="#5c2a22" text-anchor="middle">residual add</text>
+<rect x="45" y="362" width="470" height="26" rx="5" fill="#fff" stroke="#c9a29c" stroke-width="1.2"/>
+<text x="280.0" y="379.5" font-size="12.5" font-weight="normal" fill="#5c2a22" text-anchor="middle">LayerNorm（norm3）</text>
+<rect x="45" y="393" width="470" height="26" rx="5" fill="#fff" stroke="#c9a29c" stroke-width="1.2"/>
+<text x="280.0" y="410.5" font-size="12.5" font-weight="normal" fill="#5c2a22" text-anchor="middle">linear fc1 → GELU → fc2</text>
+<rect x="45" y="424" width="470" height="26" rx="5" fill="#fff" stroke="#c9a29c" stroke-width="1.2"/>
+<text x="280.0" y="441.5" font-size="12.5" font-weight="normal" fill="#5c2a22" text-anchor="middle">residual add</text>
+<rect x="45" y="455" width="470" height="26" rx="5" fill="#fff" stroke="#c9a29c" stroke-width="1.2"/>
+<text x="280.0" y="472.5" font-size="12.5" font-weight="normal" fill="#5c2a22" text-anchor="middle">＋穿插 contiguous / permute / clone（未计入）</text>
+<rect x="555" y="176" width="470" height="26" rx="5" fill="#fff" stroke="#d9bb84" stroke-width="1.2"/>
+<text x="790.0" y="193.5" font-size="12.5" font-weight="normal" fill="#5c4310" text-anchor="middle">adaln_qkv　norm + AdaLN 调制 + QKV 三投影</text>
+<rect x="555" y="207" width="470" height="26" rx="5" fill="#fff" stroke="#d9bb84" stroke-width="1.2"/>
+<text x="790.0" y="224.5" font-size="12.5" font-weight="normal" fill="#5c4310" text-anchor="middle">fused_mha_out　MHA + out proj（残差折进 bias）</text>
+<rect x="555" y="238" width="470" height="26" rx="5" fill="#fff" stroke="#d9bb84" stroke-width="1.2"/>
+<text x="790.0" y="255.5" font-size="12.5" font-weight="normal" fill="#5c4310" text-anchor="middle">mlp_gelu_norm　norm3(LN+残差) + plain-GELU FFN</text>
+<rect x="555" y="269" width="470" height="26" rx="5" fill="#fff" stroke="#d9bb84" stroke-width="1.2"/>
+<text x="790.0" y="286.5" font-size="12.5" font-weight="normal" fill="#5c4310" text-anchor="middle">　</text>
+<rect x="555" y="300" width="470" height="26" rx="5" fill="#fff" stroke="#d9bb84" stroke-width="1.2"/>
+<text x="790.0" y="317.5" font-size="12.5" font-weight="normal" fill="#5c4310" text-anchor="middle">v0.2 相对 v0.1 新增 6 个 op：</text>
+<rect x="555" y="331" width="470" height="26" rx="5" fill="#fff" stroke="#d9bb84" stroke-width="1.2"/>
+<text x="790.0" y="348.5" font-size="12.5" font-weight="normal" fill="#5c4310" text-anchor="middle">adaln_qkv · adaln_qkv_mha_out · fused_mha_out</text>
+<rect x="555" y="362" width="470" height="26" rx="5" fill="#fff" stroke="#d9bb84" stroke-width="1.2"/>
+<text x="790.0" y="379.5" font-size="12.5" font-weight="normal" fill="#5c4310" text-anchor="middle">linear_qkv · mlp_gelu_norm · dit_block</text>
+<rect x="555" y="393" width="470" height="26" rx="5" fill="#fff" stroke="#d9bb84" stroke-width="1.2"/>
+<text x="790.0" y="410.5" font-size="12.5" font-weight="normal" fill="#5c4310" text-anchor="middle">　</text>
+<rect x="555" y="424" width="470" height="26" rx="5" fill="#fff" stroke="#d9bb84" stroke-width="1.2"/>
+<text x="790.0" y="441.5" font-size="12.5" font-weight="normal" fill="#5c4310" text-anchor="middle">另：头尾 gemm_bias(W1)+mlp_silu（action_encoder）</text>
+<rect x="555" y="455" width="470" height="26" rx="5" fill="#fff" stroke="#d9bb84" stroke-width="1.2"/>
+<text x="790.0" y="472.5" font-size="12.5" font-weight="normal" fill="#5c4310" text-anchor="middle">　　　mlp_relu（CategorySpecificMLP decoder）</text>
+<rect x="1065" y="176" width="470" height="44" rx="6" fill="#d8f0de" stroke="#1e8449" stroke-width="2"/>
+<text x="1300.0" y="203.0" font-size="13.5" font-weight="bold" fill="#12572f" text-anchor="middle">torch_evo.dit_block_fused(...)</text>
+<rect x="1065" y="225" width="470" height="26" rx="6" fill="#fff" stroke="#9fcdb0" stroke-width="1.2"/>
+<text x="1300.0" y="243.0" font-size="12.5" font-weight="normal" fill="#12572f" text-anchor="middle">action.py:773　一次 FFI 吃完整个 block</text>
+<rect x="1065" y="256" width="470" height="26" rx="6" fill="#fff" stroke="#9fcdb0" stroke-width="1.2"/>
+<text x="1300.0" y="274.0" font-size="12.5" font-weight="normal" fill="#12572f" text-anchor="middle">kernel 内部只是编排两个已测 launcher：</text>
+<rect x="1065" y="287" width="470" height="26" rx="6" fill="#fff" stroke="#9fcdb0" stroke-width="1.2"/>
+<text x="1300.0" y="305.0" font-size="12.5" font-weight="normal" fill="#12572f" text-anchor="middle">　launch_adaln_qkv_mha_out</text>
+<rect x="1065" y="318" width="470" height="26" rx="6" fill="#fff" stroke="#9fcdb0" stroke-width="1.2"/>
+<text x="1300.0" y="336.0" font-size="12.5" font-weight="normal" fill="#12572f" text-anchor="middle">　launch_mlp_gelu_norm_die_single</text>
+<rect x="1065" y="349" width="470" height="26" rx="6" fill="#fff" stroke="#9fcdb0" stroke-width="1.2"/>
+<text x="1300.0" y="367.0" font-size="12.5" font-weight="normal" fill="#12572f" text-anchor="middle">dit_block_ffi.cc:205-225 把形状写成硬校验：</text>
+<rect x="1065" y="380" width="470" height="26" rx="6" fill="#fff" stroke="#9fcdb0" stroke-width="1.2"/>
+<text x="1300.0" y="398.0" font-size="12.5" font-weight="normal" fill="#12572f" text-anchor="middle">　out_k=[M_kv,N_k]　out_v=[N_q,M_kv]（V 转置）</text>
+<rect x="1065" y="411" width="470" height="26" rx="6" fill="#fff" stroke="#9fcdb0" stroke-width="1.2"/>
+<text x="1300.0" y="429.0" font-size="12.5" font-weight="normal" fill="#12572f" text-anchor="middle">　wt_v 必须 [K_kv,N_q]，错即 TVM_FFI_THROW</text>
+<rect x="1065" y="442" width="470" height="26" rx="6" fill="#fff" stroke="#9fcdb0" stroke-width="1.2"/>
+<text x="1300.0" y="460.0" font-size="12.5" font-weight="normal" fill="#12572f" text-anchor="middle">守卫（action.py:703-736）：单 Die + 2D +</text>
+<rect x="1065" y="473" width="470" height="26" rx="6" fill="#fff" stroke="#9fcdb0" stroke-width="1.2"/>
+<text x="1300.0" y="491.0" font-size="12.5" font-weight="normal" fill="#12572f" text-anchor="middle">plain-GELU + n%16，否则静默回退分段路径</text>
+<line x1="55" y1="104" x2="1525" y2="104" stroke="#888" stroke-width="2" marker-end="url(#arr)"/>
+<text x="790.0" y="94" font-size="12.5" font-weight="normal" fill="#777" text-anchor="middle">融合粒度 ↑　·　host→device 发射次数 ↓　·　守卫/校验越写越硬</text>
+<rect x="45" y="512" width="1490" height="108" rx="10" fill="#f4f7fb" stroke="#5b7fa6" stroke-width="1.8"/>
+<text x="67" y="538" font-size="15" font-weight="bold" fill="#2c5170" text-anchor="start">一次 get_action 的账（4 步 × 16 层 = 64 block）</text>
+<text x="67" y="562" font-size="12.5" font-weight="normal" fill="#33506b" text-anchor="start">960 → 192 → 64 次发射：省下来的不是 FLOP，是 host→device 往返与 aten 中间张量的 contiguous/permute。</text>
+<text x="67" y="584" font-size="12.5" font-weight="normal" fill="#33506b" text-anchor="start">但 v0.2 稳态 0.14 s/round 的同时，profile 里 to_lpu 累计 6148 ms、page_kv 1691 ms，远大于单轮耗时——</text>
+<text x="67" y="606" font-size="12.5" font-weight="normal" fill="#33506b" text-anchor="start">两个数同时成立恰恰说明：剩余瓶颈在 host↔device 往返（page_kv 把 k/v 搬回 host 重排成 paged 再传上去），不在算力。</text>
+<rect x="45" y="636" width="1490" height="172" rx="10" fill="#fdecea" stroke="#c0392b" stroke-width="2"/>
+<text x="67" y="663" font-size="15.5" font-weight="bold" fill="#a3271d" text-anchor="start">整块融合没有做的（§6.7 唯一未落地项）：cross-attention 的 K/V 每步重投</text>
+<text x="67" y="691" font-size="12.5" font-weight="normal" fill="#8e2b21" text-anchor="start">· cross 层的 K/V 源 = backbone feature，一次 get_action 的 4 步内恒定 ⇒ 数学上可缓存。</text>
+<text x="67" y="715" font-size="12.5" font-weight="normal" fill="#8e2b21" text-anchor="start">· kernel 仍每步吃 encoder + wt_k + wt_v：action.py:743 每次喂 encoder_l、:752 kv_from_nh1 = 0，</text>
+<text x="67" y="737" font-size="12.5" font-weight="normal" fill="#8e2b21" text-anchor="start">　dit_block_ffi.cc:214-219 每步重写 out_k / out_v ⇒ 4 步 × 8 个 cross 层 × 2 投影 = 64 次，其中 48 次白算（≈90 GFLOP）。</text>
+<text x="67" y="761" font-size="12.5" font-weight="normal" fill="#8e2b21" text-anchor="start">· 整块融合后它被吞进 dit_block_fused 内部 ⇒ 不再出现在 profiler 顶层，从「可见的慢」变成「隐形的慢」。</text>
+<text x="67" y="785" font-size="12.5" font-weight="normal" fill="#8e2b21" text-anchor="start">· 前置条件已就位：process_backbone_output 在循环外（flow_matching_action_head.py:352）、_ditbufs 常驻（action.py:754）。</text>
+</svg>
