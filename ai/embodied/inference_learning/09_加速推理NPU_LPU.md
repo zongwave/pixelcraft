@@ -517,6 +517,54 @@ v0.2 的 3cam golden：`action_pred` 0.99999 / `left_hand` 0.99200 / `right_hand
    `dit_block_ffi.cc` 的校验逐一对上号（哪些是输入、哪些是常驻 buffer、哪些是权重）——
    对完你就有了 §6.7 KV 缓存那个改动的完整改动面。
 
+## 附录 · L20 vs E200 硬件账本与 TRT 6.6× 归因（2026-09-28 实测补记）
+
+背景：同一天在 L20 上跑通了官方 n1.5-release 的 TensorRT 部署链（ONNX→引擎→e2e，见第 13 章 §3.4），
+顺带把 E200 的硬件规格从板端翻了个底朝天。**先说一个查证结论：E200 的峰值吞吐不在任何一份 SDK PDF
+文档里**（本地 14 份 + 板端文档只有架构/容量），真数字在**板端 `ev-qual` 质检日志**与 `ev-smi` 固件信息里。
+
+![L20 vs E200 硬件账本与瓶颈分解](images/ch09/l20_e200_bottleneck_ledger.svg)
+*图 9-6：自绘（`tools/mk_fig_ch09_l20_e200_ledger.py`）。左：e2e 墙钟账本（log 刻度）；右上：硬件规格
+（全部实查）；右下：时间归因与攻击次序。*
+
+### A.1 硬件规格（实查口径）
+
+| 指标 | NVIDIA L20（本机 nvml） | EVAS E200/E100（板端 ev-qual / ev-smi） |
+|---|---|---|
+| 架构 | Ada SM8.9，92 SM @2.52 GHz | Epoch Chiplet，32 核=8 集群×4 核，双 Die，ME/VE/TE 数据流 |
+| FP32 矩阵 | 59.8 TF | 64 TF |
+| BF16/FP16 稠密 | **119.5 TF** | **256 TF**（实测达成 255.9，99.97%） |
+| INT8 / INT4 | 239 TOPS / — | **512 TOPS**（实测 511.8）/ 1024 TOPS（实测 1023.3） |
+| 显存/带宽 | 48GB GDDR6 @864 GB/s | 48GB DDR @18 Gbps；GLB↔L2 理论 960、**实测读 771/写 747 GB/s** |
+| 片上存储 | L2 96 MB | L1 56MB（AM 8 + MM 48）+ L2 72MB（集群 9MB×8） |
+| 互连 | PCIe Gen4 ×16，350 W | **PCIe Gen5 ×16** + 16×XLink 200Gb/s；边缘功耗档 |
+| 算力/带宽比 | 138 FLOP/B | **267 FLOP/B（更"挑食"，要求更高复用率）** |
+
+### A.2 TRT 为什么能 6.6×（0.686→0.103 s）——一笔 roofline 账
+
+一次 `get_action` 总计算量 ≈ 1.5–2 TFLOP ⇒ L20 理论下限 ~15 ms、权重带宽下限 ~7 ms。
+实测达成率：PyTorch **~2%**、TRT **~16%**。所以 **6.6× 不是 tensor core 多干了 6.6 倍活，
+而是把 PyTorch 浪费的 98% 机器时间捡回来**，按贡献排序：
+
+1. **清算"前端税"**：DiT 16 层×4 步 ≈ 960 次算子发射，batch1 下单个 GEMM 几 µs，而 PyTorch
+   每次发射的 Python/dispatcher/autograd/临时分配开销 ≥ 计算本身（本章 §4 "省发射≠省时间"的 GPU 版）；
+2. **kernel fusion**：AdaLN/bias/激活融进 GEMM 首尾，省中间张量 HBM 往返；
+3. **CUDA Graph + 静态 shape**：整图录制回放，host↔device 往返从千次级降到个位数；
+4. **权重预打包/最优 tiling**（strongly-typed fp16，Myelin 按固定形状选型）。
+
+### A.3 NPU e2e 优化判断（对照 L20-TRT 0.103 s）
+
+- 现状：E200 **单 Die** v0.2-fix ≈ 0.113 s ≈ L20-TRT，且纸面算力是 L20 的 2.1×、带宽持平；
+- 卡点不同：L20-TRT 卡在 kernel 执行效率（已达 16% 峰值）；**E200 卡在 host↔device 往返**
+  （busy 仅 51%，`to_lpu`/`page_kv` 为大头，FFI 单次固定成本 60–150 µs vs GPU launch ~5 µs）；
+- 路线（顺序即优先级，见 §10 排序）：①往返清零（整块融合 64 发射/轮、权重/KV 常驻、去 `page_kv`）
+  → ②双 Die K/N 切分吃满（算子已在库，推算可进 ~0.07 s，**反超 L20-TRT**）
+  → ③INT8 红利（512 TOPS=2×，但 `left_hand` cos 0.992 已亮黄灯，须逐通道验证）；
+- KV-cache 反证实验（省 90 GFLOP 而 e2e 不动）再次确认：**发射 bound 系统先砍算力=白砍**，
+  但收益已埋好，往返清零后会一次性兑现；
+- 终局：两家物理下限同为 ~7 ms 档；L20 剩余空间在 FP8/量化，E200 在常驻化+双 Die——
+  而**每瓦性能**（边缘功耗档 vs 350 W）才是 NPU 的胜负手。
+
 ## 疑问与批注
 
 （预留：记录问题。）

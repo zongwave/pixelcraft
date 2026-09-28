@@ -1,0 +1,91 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1560" height="1050" viewBox="0 0 1560 1050">
+<rect width="1560" height="1050" fill="#fbfbfd"/>
+<text x="780.0" y="40.0" font-size="22" font-weight="bold" fill="#111" text-anchor="middle">L20 vs E200：硬件账本与 gr00t N1.5 e2e 瓶颈分解（2026-09-28 实测）</text>
+<rect x="60.0" y="80.0" width="700.0" height="620.0" rx="8" fill="#ffffff" stroke="#d8d8de" stroke-width="1.4"/>
+<text x="76.0" y="108.0" font-size="15" font-weight="bold" fill="#01579b" text-anchor="start">① 一次 get_action 的墙钟账本（log 刻度，单位 s）</text>
+<line x1="345.6" y1="128.0" x2="345.6" y2="640.0" stroke="#ccc" stroke-width="1" stroke-dasharray="3,3"/>
+<line x1="530.5" y1="128.0" x2="530.5" y2="640.0" stroke="#ccc" stroke-width="1" stroke-dasharray="3,3"/>
+<line x1="715.4" y1="128.0" x2="715.4" y2="640.0" stroke="#ccc" stroke-width="1" stroke-dasharray="3,3"/>
+<text x="345.6" y="655.0" font-size="11" font-weight="normal" fill="#888" text-anchor="middle">0.01</text>
+<text x="530.5" y="655.0" font-size="11" font-weight="normal" fill="#888" text-anchor="middle">0.1</text>
+<text x="715.4" y="655.0" font-size="11" font-weight="normal" fill="#888" text-anchor="middle">1.0</text>
+<text x="280.0" y="155.0" font-size="12.5" font-weight="normal" fill="#222" text-anchor="end">L20 · 原生 PyTorch (bf16)</text>
+<rect x="290.0" y="140.0" width="395.1" height="22.0" rx="4" fill="#e57373"/>
+<text x="675.1" y="156.0" font-size="12" font-weight="bold" fill="#ffffff" text-anchor="end">达成算力 ≈ 峰值 2%  0.686</text>
+<text x="280.0" y="201.0" font-size="12.5" font-weight="normal" fill="#222" text-anchor="end">E200 单Die · 原生算子链</text>
+<rect x="290.0" y="186.0" width="410.0" height="22.0" rx="4" fill="#ef9a9a"/>
+<text x="690.0" y="202.0" font-size="12" font-weight="bold" fill="#ffffff" text-anchor="end">v0.1 之前基线  0.826</text>
+<text x="280.0" y="247.0" font-size="12.5" font-weight="normal" fill="#222" text-anchor="end">E200 单Die · v0.1</text>
+<rect x="290.0" y="232.0" width="396.4" height="22.0" rx="4" fill="#ffb74d"/>
+<text x="676.4" y="248.0" font-size="12" font-weight="bold" fill="#ffffff" text-anchor="end">发射/拷贝大清理，−16%  0.697</text>
+<text x="280.0" y="293.0" font-size="12.5" font-weight="normal" fill="#222" text-anchor="end">E200 单Die · v0.2</text>
+<rect x="290.0" y="278.0" width="267.5" height="22.0" rx="4" fill="#66bb6a"/>
+<text x="547.5" y="294.0" font-size="12" font-weight="bold" fill="#ffffff" text-anchor="end">整块融合 64 发射/轮，5.9×  0.140</text>
+<text x="280.0" y="339.0" font-size="12.5" font-weight="normal" fill="#222" text-anchor="end">E200 单Die · v0.2-fix</text>
+<rect x="290.0" y="324.0" width="250.3" height="22.0" rx="4" fill="#2e7d32"/>
+<text x="530.3" y="340.0" font-size="12" font-weight="bold" fill="#ffffff" text-anchor="end">busy 51%，host 往返成大头  0.113</text>
+<text x="280.0" y="385.0" font-size="12.5" font-weight="normal" fill="#222" text-anchor="end">L20 · TensorRT fp16</text>
+<rect x="290.0" y="370.0" width="242.9" height="22.0" rx="4" fill="#42a5f5"/>
+<text x="522.9" y="386.0" font-size="12" font-weight="bold" fill="#ffffff" text-anchor="end">达成算力 ≈ 峰值 16%（6.6×）  0.103</text>
+<text x="280.0" y="431.0" font-size="12.5" font-weight="normal" fill="#222" text-anchor="end">E200 双Die·往返清零(推算)</text>
+<rect x="290.0" y="416.0" width="211.9" height="22.0" rx="4" fill="#1565c0"/>
+<text x="509.9" y="432.0" font-size="12" font-weight="bold" fill="#333" text-anchor="start">0.070…</text>
+<text x="563.9" y="432.0" font-size="11.5" font-weight="normal" fill="#777" text-anchor="start">设备时间×0.5 + 常驻化</text>
+<text x="280.0" y="477.0" font-size="12.5" font-weight="normal" fill="#222" text-anchor="end">物理下限（权重带宽）</text>
+<rect x="290.0" y="462.0" width="27.0" height="22.0" rx="4" fill="#9e9e9e"/>
+<text x="325.0" y="478.0" font-size="12" font-weight="bold" fill="#333" text-anchor="start">0.007</text>
+<text x="379.0" y="478.0" font-size="11.5" font-weight="normal" fill="#777" text-anchor="start">3B×2B ÷ ~0.9TB/s</text>
+<rect x="76.0" y="668.0" width="668.0" height="40.0" rx="6" fill="#fff8e1" stroke="#f9a825" stroke-width="1.4"/>
+<text x="90.0" y="693.0" font-size="12.5" font-weight="normal" fill="#795548" text-anchor="start">读法：两条 0.1s 级蓝/绿条贴在一起 —— 半张 E200 ≈ 整张 L20-TRT；而它们离灰色物理下限都还有 ~10×。</text>
+<rect x="800.0" y="80.0" width="700.0" height="330.0" rx="8" fill="#ffffff" stroke="#d8d8de" stroke-width="1.4"/>
+<text x="816.0" y="108.0" font-size="15" font-weight="bold" fill="#01579b" text-anchor="start">② 硬件规格对照（本机 nvml · 板端 ev-qual/ev-smi 实查）</text>
+<text x="830.0" y="177.0" font-size="12.5" font-weight="bold" fill="#333" text-anchor="start">NVIDIA L20 (Ada·92SM@2.52GHz)</text>
+<text x="1160.0" y="177.0" font-size="12.5" font-weight="bold" fill="#333" text-anchor="start">EVAS E200/E100 (Epoch·32核·双Die)</text>
+<line x1="820.0" y1="186.0" x2="1480.0" y2="186.0" stroke="#bbb" stroke-width="1.2"/>
+<text x="830.0" y="209.0" font-size="12.5" font-weight="normal" fill="#1565c0" text-anchor="start">BF16 稠密  119.5 TF</text>
+<text x="1160.0" y="209.0" font-size="12.5" font-weight="normal" fill="#1565c0" text-anchor="start">BF16  256 TF（实测 255.9，99.97%）</text>
+<text x="830.0" y="241.0" font-size="12.5" font-weight="normal" fill="#1565c0" text-anchor="start">INT8  239 TOPS</text>
+<text x="1160.0" y="241.0" font-size="12.5" font-weight="normal" fill="#1565c0" text-anchor="start">INT8  512 TOPS · INT4 1024</text>
+<text x="830.0" y="273.0" font-size="12.5" font-weight="normal" fill="#2e7d32" text-anchor="start">GDDR6 864 GB/s</text>
+<text x="1160.0" y="273.0" font-size="12.5" font-weight="normal" fill="#2e7d32" text-anchor="start">DDR 理论 960 / 实测读771·写747 GB/s</text>
+<text x="830.0" y="305.0" font-size="12.5" font-weight="normal" fill="#2e7d32" text-anchor="start">PCIe Gen4 x16 · 350W</text>
+<text x="1160.0" y="305.0" font-size="12.5" font-weight="normal" fill="#2e7d32" text-anchor="start">PCIe Gen5 x16 + 16×XLink · 边缘功耗档</text>
+<text x="830.0" y="337.0" font-size="12.5" font-weight="normal" fill="#555" text-anchor="start">L2 96 MB</text>
+<text x="1160.0" y="337.0" font-size="12.5" font-weight="normal" fill="#555" text-anchor="start">L1 56MB(AM8+MM48) + L2 72MB</text>
+<text x="830.0" y="369.0" font-size="12.5" font-weight="normal" fill="#e65100" text-anchor="start">算力/带宽 138 FLOP/B</text>
+<text x="1160.0" y="369.0" font-size="12.5" font-weight="normal" fill="#e65100" text-anchor="start">算力/带宽 267 FLOP/B —— 更挑食</text>
+<text x="820.0" y="385.0" font-size="11.5" font-weight="normal" fill="#888" text-anchor="start">注：E200 规格为 ev-qual 整卡口径（block_num 2）；gr00t 当前仅用单 Die。</text>
+<rect x="800.0" y="440.0" width="700.0" height="530.0" rx="8" fill="#ffffff" stroke="#d8d8de" stroke-width="1.4"/>
+<text x="816.0" y="468.0" font-size="15" font-weight="bold" fill="#01579b" text-anchor="start">③ 时间到底花在哪（归因）</text>
+<text x="830.0" y="498.0" font-size="12.5" font-weight="bold" fill="#222" text-anchor="start">L20 PyTorch 0.686 s 分解</text>
+<rect x="830.0" y="506.0" width="190.8" height="26.0" rx="3" fill="#ef5350"/>
+<text x="925.4" y="524.0" font-size="11.5" font-weight="normal" fill="#fff" text-anchor="middle">head 0.385</text>
+<rect x="1020.8" y="506.0" width="113.0" height="26.0" rx="3" fill="#ff9800"/>
+<text x="1077.3" y="524.0" font-size="11.5" font-weight="normal" fill="#fff" text-anchor="middle">backbone 0.228</text>
+<rect x="1133.8" y="506.0" width="35.7" height="26.0" rx="3" fill="#bdbdbd"/>
+<text x="1151.7" y="524.0" font-size="11.5" font-weight="normal" fill="#333" text-anchor="middle">其他 0.072</text>
+<text x="830.0" y="556.0" font-size="12" font-weight="normal" fill="#c62828" text-anchor="start">DiT 4 步 ≈ 960 次算子发射：发射/Python/分发开销 ≥ 计算本身</text>
+<text x="830.0" y="574.0" font-size="12" font-weight="normal" fill="#333" text-anchor="start">TRT 把这头“前端税”清算掉 → 6.6×；但也只用到峰值 16%。</text>
+<text x="830.0" y="610.0" font-size="12.5" font-weight="bold" fill="#222" text-anchor="start">E200 v0.2 0.140 s 分解</text>
+<rect x="830.0" y="618.0" width="173.4" height="26.0" rx="3" fill="#66bb6a"/>
+<rect x="1003.4" y="618.0" width="166.6" height="26.0" rx="3" fill="#ba68c8"/>
+<text x="916.7" y="636.0" font-size="11.5" font-weight="normal" fill="#fff" text-anchor="middle">device busy 51%</text>
+<text x="1086.7" y="636.0" font-size="11.5" font-weight="normal" fill="#fff" text-anchor="middle">host↔device 往返 49%</text>
+<text x="830.0" y="668.0" font-size="12" font-weight="normal" fill="#6a1b9a" text-anchor="start">to_lpu 累计 6148ms、page_kv 1691ms；FFI 单次固定成本 60–150 µs（GPU launch ~5 µs）</text>
+<rect x="830.0" y="698.0" width="26.0" height="26.0" rx="13" fill="#c62828"/>
+<text x="843.0" y="716.0" font-size="14" font-weight="bold" fill="#fff" text-anchor="middle">1</text>
+<text x="870.0" y="710.0" font-size="13" font-weight="bold" fill="#c62828" text-anchor="start">砍发射/往返</text>
+<text x="1040.0" y="710.0" font-size="12" font-weight="normal" fill="#444" text-anchor="start">整块融合(960→64 发射)、权重/KV 常驻、去 page_kv</text>
+<rect x="830.0" y="738.0" width="26.0" height="26.0" rx="13" fill="#e65100"/>
+<text x="843.0" y="756.0" font-size="14" font-weight="bold" fill="#fff" text-anchor="middle">2</text>
+<text x="870.0" y="750.0" font-size="13" font-weight="bold" fill="#e65100" text-anchor="start">吃满双 Die</text>
+<text x="1040.0" y="750.0" font-size="12" font-weight="normal" fill="#444" text-anchor="start">K/N 切分算子已在库；设备时间 ~60ms ⇒ e2e ~0.07s</text>
+<rect x="830.0" y="778.0" width="26.0" height="26.0" rx="13" fill="#2e7d32"/>
+<text x="843.0" y="796.0" font-size="14" font-weight="bold" fill="#fff" text-anchor="middle">3</text>
+<text x="870.0" y="790.0" font-size="13" font-weight="bold" fill="#2e7d32" text-anchor="start">最后才砍算力</text>
+<text x="1040.0" y="790.0" font-size="12" font-weight="normal" fill="#444" text-anchor="start">INT8 512TOPS=2× 红利；但 left_hand cos 0.992 ⇒ 逐通道验证</text>
+<rect x="830.0" y="824.0" width="640.0" height="54.0" rx="6" fill="#e8f5e9" stroke="#66bb6a" stroke-width="1.4"/>
+<text x="846.0" y="846.0" font-size="12.5" font-weight="bold" fill="#1b5e20" text-anchor="start">反证实验：KV-cache 省 90 GFLOP、设备 −6.8 ms/step，e2e 纹丝不动(0.113 vs 0.114)</text>
+<text x="846.0" y="866.0" font-size="12.5" font-weight="normal" fill="#1b5e20" text-anchor="start">⇒ 发射 bound 的系统里先砍算力=白砍；往返清零后这些收益会一次性兑现。</text>
+<text x="780.0" y="1034.0" font-size="11.5" font-weight="normal" fill="#888" text-anchor="middle">来源：L20 nvml+本地基准(20·去3warmup) · E200 ev-qual/ev-smi 实查 + groot_ops CHANGELOG v0.1–v0.2-fix · 单Die口径已标注</text>
+</svg>
