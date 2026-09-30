@@ -52,6 +52,52 @@ class EagleBackbone(nn.Module):
 > head 侧那几个投影件，不是这条）。**跨机对齐时视觉塔权重同样属于「必须与训练端逐字节一致」的部分**
 > （第 02 章 #168 / 第 13 章）——它并非如直觉那样「冻结所以无所谓」。
 
+### 2.5 拆开黑盒第一步：视觉塔本体是 SigLIP（参数全表 · 权重实测）
+
+上一节的勘误框把封装层讲清了，但 `vision_model` 本身在本章一直是黑盒——"看懂世界"这件事
+其实全部发生在它里面。vendored `eagle2_hg_model/config.json`（`vision_config`）+ 官方 ckpt
+权重头对出的参数表（2026-09-29 实测，`model-00001` safetensors 头）：
+
+| 部件 | 事实 | 证据 |
+|---|---|---|
+| 架构 | **SigLIP ViT（so400m 系）**，`model_type=siglip_vision_model`，pre-LN（每层 `layer_norm1/2`），**无 CLS**——输出全部 patch token | config + 权重键名 `encoder.layers.0..26` |
+| 规模 | **27 层** × hidden **1152** × 16 头，FFN 中间维 4304，激活 `gelu_pytorch_tanh` | config `vision_config` |
+| patch embed | **Conv2d `[1152, 3, 14, 14]`**（224/14 = 16 ⇒ 每 tile **16×16 = 256 个 patch**） | ckpt `embeddings.patch_embedding.weight` |
+| 位置编码 | **学习式绝对 PE `[256, 1152]`**（无 CLS 位、无 RoPE、tile 定尺 224 所以**无需插值**） | ckpt `embeddings.position_embedding.weight` |
+| 注意力实现 | 建模代码强制 `flash_attention_2` | `modeling_eagle2_5_vl.py:107` |
+
+![SigLIP 视觉塔结构框图](images/ch05/siglip_vision_tower.svg)
+*图 5-1：自绘（`tools/mk_fig_ch05_vision_tower_backbone.py`）——单 tile 视角的视觉塔纵向流程；右侧绿框把 09 §3.5 补丁表的 4 个 SigLIP 落点对号入座，红框是 02 §7 畸变事故的结构层解释（表末行 flash_attention_2 即图中 MHSA 的注记）。*
+
+两个"原来如此"顺带落地：
+- 第 09 章 §3.5 表里 SigLIP 行的三个补丁（`conv2d_patch_embed` / `NPU_SiglipVisionEmbeddings/_Attention/_MLP`）
+  现在能对号入座：patch-embed 是那张表里唯一的 conv，MLP 融合核 `mlp_gelu` 吃的就是 `gelu_pytorch_tanh`；
+- 02 章 §7 事故里"形状全绿、内容拉伸 1.6×"之所以危险，正是这套结构造成的：
+  **PE 固定在 16×16 格上、patch 定尺 14×14**——几何畸变不改变任何张量形状，只把错误内容
+  摊进正确的格子，形状级监控天然失明（02 §7.4 的机制版解释）。
+
+### 2.6 mlp1：视觉→语言的桥，官方权重上是 `Linear(1152→2048)` 单发
+
+`modeling_eagle2_5_vl.py:142-153` 给 mlp1 写了三条实例化分支（两层 MLP+LN / 像素洗牌单层 /
+**逐 patch 单层**），选哪条由两个开关决定：`use_pixel_shuffle=false` + `mlp_connector_layers=1`
+⇒ 走第三条 `nn.Sequential(nn.Linear(vit_hidden, llm_hidden))`。ckpt 权重形状直接终审：
+
+```
+backbone.eagle_model.mlp1.0.weight  = [2048, 1152]      # 逐 patch 直通，没有 2×2 packing
+backbone.eagle_model.mlp1.0.bias    = [2048]
+```
+
+> **[!] 又一个 config 字段是死字段**：config 里 `downsample_ratio=0.5` 看似要把每 tile 256 token
+> 洗成 64（`num_image_token = (224/14)² × 0.5² = 64`，`modeling:92-97`）——但那条账只在
+> `use_pixel_shuffle=true` 时生效；本配置下 `num_image_token = 256`，权重形状 [2048,1152] 与
+> §4.5 的实测 token 数互相印证，**0.5 是死字段**。教训与 §2 勘误框同源：
+> **Eagle 的 config 字段只有和实例化分支对上了才算数，最终裁判是权重形状。**
+
+职责钉死后，三件旧事一并归位：① 09 章补丁表里 `eagle_backbone_init_wrapper` 换的"mlp1(1152→2048)"
+就是这座桥（换成 `NPULinear` 的 gemm_bias）；② 勘误框里 `tune_projector=true` 训练的投影件，
+视觉侧就是它（另一部分在 head 侧的 state/action encoder）；③ 它是**每个 patch 独立**的线性映射——
+不做任何空间聚合，所以视觉塔输出的空间粒度一路保留到语言塔门口（token 账见 §4.5）。
+
 ## 3. "冻结"是什么意思（`set_trainable_parameters`）
 
 ```python
@@ -69,6 +115,9 @@ def set_trainable_parameters(self, tune_llm, tune_visual):
   但冻结模块要保持在 `eval()`（关掉 dropout/BatchNorm 的随机行为）——推理时整体就是 eval，无影响。
 
 ## 4. 前向：把输入变成 backbone_features（`forward`）
+
+![Eagle backbone 前向全景：双道拼接 → Qwen3 前 12 层](images/ch05/backbone_eagle_vlm.svg)
+*图 5-2：自绘（同图 5-1 脚本）——先看全图再读代码：上泳道视觉道（图 5-1 是其中 SigLIP 框的展开）、中泳道文本道、image_pad 处拼成 296×2048 后进 Qwen3（✂ 处后 16 层整段未实例化），取第 12 层 hidden 过 Identity 出口。token 账右侧一栏与 §4.5 同源同脚本。*
 
 ```python
 def forward(self, vl_input):
@@ -95,6 +144,43 @@ def forward_eagle(self, vl_input):
 - 输出键固定：`backbone_features`（特征）+ `backbone_attention_mask`（掩码），
   与第 04 章 `validate_data` 要求一致。
 
+### 4.5 像素 → `backbone_features` 的完整 token 账（seq_len 296 从哪来）
+
+`296` 从本章往后无处不在——06 §6.7 的"~90 GFLOP 白算"、§6.8 维度账本、09 §7 对账表、
+`[B, 296, 2048]` 的交接形状都建立在它上面，但**全书一直没算过这笔账**。现在算（全部本地实测，
+复跑 `tools/token_ledger_eagle.py`，环境=gr00t conda env；口径 = vendored eagle2_hg_model，
+n1.5-release 与 main 该目录零 diff）：
+
+**链路四步**：① 图像进 Eagle 动态 tiling（`tile=224`、`tokens_per_tile=256`、`max_dynamic_tiles=12`、
+`use_thumbnail=true`、`do_resize=do_pad=false`）按**纵横比**挑网格、每 tile 缩进 224×224；
+② 每 tile 过 SigLIP → 256 个 patch token（§2.5，无洗牌）；③ mlp1 逐 patch 投到 2048（§2.6）；
+④ 文本模板把每张图的 256 token 展开在 `<image>` 占位处，与指令 token 拼成序列进语言塔。
+
+**实测分解**（2026-09-29，processor 级，与 02 §7.6 的 L20 前向实测一致）：
+
+| 输入 | tiles（含缩略图） | 图像 token | 文本 token | seq_len |
+|---|---|---|---|---|
+| 256×256 单图 · demo 指令 | 1 | 256 | 40（模板 26 + 指令 14） | **296** |
+| 256×256 单图 · 空指令 | 1 | 256 | 26 | 282 |
+| 256×256 **三相机** · demo 指令 | 3 | 768 | 45 | 813 |
+| 640×640 单图 | **10**（3×3 + 缩略图） | **2560** | 26 | 2586 |
+| 640×400（宽幅 1.6:1） | 7（3×2 + 缩略图） | 1792 | 26 | 1818 |
+
+四个推论，三个顺手回收别章的伏笔：
+
+1. **恒等式（单相机版）**：`seq_len = 256×tiles + 模板26 + tokenize(指令)`——02 章 demo 的
+   296 = 256+26+14，与 06/07/09 用的 `kv_len=296` 对齐（那都是**单相机** demo 口径）。
+   **多相机不套用 26**：每张额外图在模板里还要带自己的定界符，实测三相机文本侧涨到 45
+   （26+14+两图共 19），总账 813。跨机对账先问相机数和 tile 数、逐段加账，别拿 296 硬套
+   （同 09 §10.3 口径纪律②的 token 版）。
+2. **02 §7.3 的"推算表"转实测**：640×640 → 10 tiles / 2560、640×400 → 7 tiles / 1792，
+   脚本断言已内置，口径漂移会先炸脚本而不是让表格悄悄过期。
+3. **tile 网格只看纵横比、不看内容**（1×1 时缩略图不另计）——所以 #168 里训练帧与拉伸帧
+   的 token 账**逐项相等**，"形状监控必然漏检"到这里有了完整的算术版本。
+4. **视觉塔在一次 `get_action` 里只前向一次**：K 步去噪共享同一份 `backbone_features`——
+   这正是 06 §6.7"观测=prefill、去噪循环=decode"同构的出处，也是 09 §10.1"前缀恒定 ⇒
+   条件量可预计算常驻"的算术依据（1 图 1 步去噪的负载里，这 296-token 前缀就是最肥的一段）。
+
 ## 5. backbone 在整条链路里的"上下游"
 
 ```
@@ -116,12 +202,19 @@ backbone 的输出**不直接是动作**，而是"世界的理解"，作为条�
 - 作用：把视频+语言变成 `backbone_features`（语义条件）。
 - 冻结即 `requires_grad_(False)`；推理下无梯度，天然轻量。
 - 输出 `backbone_features` + `backbone_attention_mask`，作为 action head 的条件输入。
+- 黑盒拆开看：视觉塔 = SigLIP ViT（27 层/1152/patch14/256 token 每 tile/学习式 PE/无 CLS），
+  桥 = `mlp1 = Linear(1152→2048)` 逐 patch 单发（`downsample_ratio=0.5` 是死字段，权重形状终审）。
+- token 账：单相机 `seq_len = 256×tiles + 模板26 + tokenize(指令)`（demo 256+26+14 = **296**）；
+  每加一张图另涨约半成模板 token（三相机实测 813），640×640 单图 10 tiles → 2560。
+  复跑 `tools/token_ledger_eagle.py`（内置断言防口径漂移）。
 
 ## 自己动手
 
 1. 打开 `eagle_backbone.py`，数一下 `forward` 输出了哪些键，和 `gr00t_n1.py::validate_data`
    需要的键对不对得上。
 2. 思考：如果 `project_to_dim != action_head 期望维度`，会发生什么？在哪个层报维度错误？
+3. 跑 `tools/token_ledger_eagle.py`，把 demo 指令换成你自己的句子，验证恒等式仍成立；
+   再喂一张 320×256 的图，预测 tile 网格并和实测对——对不上时，先想想纵横比规则。
 
 ## 疑问与批注
 

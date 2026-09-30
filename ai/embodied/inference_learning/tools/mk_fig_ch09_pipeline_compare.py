@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""第 9 章配图：gr00t e2e 原生 PyTorch 逐算子 pipeline vs E200 NPU 融合算子 pipeline（最终交付 v0.2）。
+"""第 9 章配图：gr00t e2e NPU 逐算子初步接入（未融合）vs E200 NPU 融合算子 pipeline（最终交付 v0.2）。
+（左列口径勘误 2026-09-29：0.826 s 是 NPU 逐算子接入的初步实测，不是 H20 上的原生 PyTorch。
 
 生成：
   images/ch09/npu_pipeline_native_vs_fused.svg
@@ -61,15 +62,15 @@ class SVG:
 
 s = SVG()
 s.rect(0, 0, W, H, "#fafafa", "none")
-s.text(W / 2, 42, "gr00t e2e infer Pipeline：原生 PyTorch 逐算子  vs  E200 NPU 融合算子（v0.2 交付口径）", 24, bold=True, anchor="middle")
+s.text(W / 2, 42, "gr00t e2e infer Pipeline：NPU 逐算子初步接入（未融合）  vs  E200 NPU 融合算子（v0.2 交付口径）", 24, bold=True, anchor="middle")
 s.text(W / 2, 68, "单 Die · 数值来源：groot_ops CHANGELOG v0.1/v0.2 与 Redmine #162 板端实测（L20 交叉机 golden 比对）", 13, anchor="middle", color="#666")
 
 LX, RX, CW = 30, 800, 730   # 两列 x 与宽
 
-# ---------- 左列：原生 PyTorch ----------
+# ---------- 左列：NPU 逐算子初步接入（模型逻辑原生，未融合） ----------
 y = 95
 s.rect(LX, y, CW, 1080, "#fdecea", "#e6b0aa", 12, 2)
-s.text(LX + CW / 2, y + 32, "原生 PyTorch 逐算子（未融合 / NPU 接入基线）", 18, bold=True, anchor="middle", color="#c0392b")
+s.text(LX + CW / 2, y + 32, "NPU 逐算子初步接入（模型逻辑原生 · 未做块级融合）", 18, bold=True, anchor="middle", color="#c0392b")
 y += 52
 y = s.box(LX + 25, y, CW - 50, ["输入：图像 ×N + 文本 + 本体 state"], "#fff", "#aaa8", lcolor="#333") + 14
 s.arrow(LX + CW / 2, y - 14, LX + CW / 2, y + 2); y += 4

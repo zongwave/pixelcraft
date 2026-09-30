@@ -1,0 +1,130 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1560" height="1080" viewBox="0 0 1560 1080" font-family="Helvetica, Arial, 'Noto Sans CJK SC', 'WenQuanYi Zen Hei', sans-serif">
+<defs><marker id="arr" markerWidth="10" markerHeight="10" refX="7" refY="3" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L8,3 L0,6 Z" fill="#555"/></marker><marker id="arrRed" markerWidth="10" markerHeight="10" refX="7" refY="3" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L8,3 L0,6 Z" fill="#c0392b"/></marker><marker id="arrGreen" markerWidth="10" markerHeight="10" refX="7" refY="3" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L8,3 L0,6 Z" fill="#1e8449"/></marker><marker id="arrBlue" markerWidth="10" markerHeight="10" refX="7" refY="3" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L8,3 L0,6 Z" fill="#1f6feb"/></marker></defs>
+<rect x="0" y="0" width="1560" height="1080" rx="8" fill="#fafafa" stroke="none" stroke-width="1.6"/>
+<text x="780.0" y="40" font-size="23" font-weight="bold" fill="#222" text-anchor="middle">EagleBackbone 前向全景：图像 + 文本 → backbone_features [B, 296, 2048]</text>
+<text x="780.0" y="66" font-size="12.5" font-weight="normal" fill="#666" text-anchor="middle">口径 = vendored eagle2_hg_model（n1.5-release 与 main 零 diff）· token 账实测 tools/token_ledger_eagle.py · 示例 = demo 单相机单 tile</text>
+<rect x="30" y="88" width="1120" height="258" rx="12" fill="#eaf2fd" stroke="#1f6feb" stroke-width="2"/>
+<text x="50" y="116" font-size="15" font-weight="bold" fill="#1f6feb" text-anchor="start">视觉道（image → visual tokens）</text>
+<rect x="50" y="136" width="196" height="76" rx="8" fill="#fff" stroke="#aaa" stroke-width="1.6"/>
+<text x="148.0" y="162" font-size="12.5" font-weight="bold" fill="#222" text-anchor="middle">输入图像 ×N</text>
+<text x="148.0" y="183" font-size="11.5" font-weight="normal" fill="#444" text-anchor="middle">demo：单相机 1 张</text>
+<text x="148.0" y="201" font-size="11.5" font-weight="normal" fill="#444" text-anchor="middle">224×224×3</text>
+<line x1="246" y1="196" x2="270" y2="196" stroke="#1f6feb" stroke-width="1.8" marker-end="url(#arrBlue)"/>
+<rect x="274" y="136" width="196" height="94" rx="8" fill="#fff" stroke="#aaa" stroke-width="1.6"/>
+<text x="372.0" y="162" font-size="12.5" font-weight="bold" fill="#222" text-anchor="middle">动态 tiling</text>
+<text x="372.0" y="183" font-size="11.5" font-weight="normal" fill="#444" text-anchor="middle">tile=224 · 按纵横比挑网格</text>
+<text x="372.0" y="201" font-size="11.5" font-weight="normal" fill="#444" text-anchor="middle">max 12 · 1×1 时缩略图不计</text>
+<text x="372.0" y="219" font-size="11.5" font-weight="normal" fill="#444" text-anchor="middle">demo = 1 tile</text>
+<line x1="470" y1="196" x2="494" y2="196" stroke="#1f6feb" stroke-width="1.8" marker-end="url(#arrBlue)"/>
+<rect x="498" y="136" width="196" height="94" rx="8" fill="#eaf2fd" stroke="#1f6feb" stroke-width="1.6"/>
+<text x="596.0" y="162" font-size="12.5" font-weight="bold" fill="#1f6feb" text-anchor="middle">SigLIP 视觉塔</text>
+<text x="596.0" y="183" font-size="11.5" font-weight="normal" fill="#444" text-anchor="middle">27 层 × 1152 × 16 头</text>
+<text x="596.0" y="201" font-size="11.5" font-weight="normal" fill="#444" text-anchor="middle">结构细节 = 图 5-1</text>
+<text x="596.0" y="219" font-size="11.5" font-weight="normal" fill="#444" text-anchor="middle">tune_visual=True 可训</text>
+<line x1="694" y1="196" x2="718" y2="196" stroke="#1f6feb" stroke-width="1.8" marker-end="url(#arrBlue)"/>
+<rect x="722" y="136" width="196" height="76" rx="8" fill="#fff" stroke="#aaa" stroke-width="1.6"/>
+<text x="820.0" y="162" font-size="12.5" font-weight="bold" fill="#222" text-anchor="middle">256 patch token / tile</text>
+<text x="820.0" y="183" font-size="11.5" font-weight="normal" fill="#444" text-anchor="middle">无 CLS · 无洗牌</text>
+<text x="820.0" y="201" font-size="11.5" font-weight="normal" fill="#444" text-anchor="middle">downsample=0.5 是死字段</text>
+<line x1="918" y1="196" x2="942" y2="196" stroke="#1f6feb" stroke-width="1.8" marker-end="url(#arrBlue)"/>
+<rect x="946" y="136" width="196" height="76" rx="8" fill="#fdf6e3" stroke="#b9770e" stroke-width="1.6"/>
+<text x="1044.0" y="162" font-size="12.5" font-weight="bold" fill="#b9770e" text-anchor="middle">mlp1 = Linear(1152→2048)</text>
+<text x="1044.0" y="183" font-size="11.5" font-weight="normal" fill="#444" text-anchor="middle">逐 patch 单发 · 无空间聚合</text>
+<text x="1044.0" y="201" font-size="11.5" font-weight="normal" fill="#444" text-anchor="middle">tune_projector 投影件</text>
+<rect x="30" y="366" width="1120" height="150" rx="12" fill="#fdf6e3" stroke="#b9770e" stroke-width="2"/>
+<text x="50" y="394" font-size="15" font-weight="bold" fill="#b9770e" text-anchor="start">文本道（chat 模板 + 指令 → text tokens）</text>
+<rect x="50" y="412" width="330" height="58" rx="8" fill="#fff" stroke="#aaa" stroke-width="1.6"/>
+<text x="215.0" y="438" font-size="12.5" font-weight="bold" fill="#222" text-anchor="middle">chat 模板 26 + tokenize(指令) 14</text>
+<text x="215.0" y="459" font-size="11.5" font-weight="normal" fill="#444" text-anchor="middle">demo 指令 14 token ⇒ 共 40</text>
+<rect x="430" y="412" width="300" height="58" rx="8" fill="#fff" stroke="#aaa" stroke-width="1.6"/>
+<text x="580.0" y="438" font-size="12.5" font-weight="bold" fill="#222" text-anchor="middle">token embedding</text>
+<text x="580.0" y="459" font-size="11.5" font-weight="normal" fill="#444" text-anchor="middle">词表 → 2048 维</text>
+<rect x="780" y="412" width="240" height="58" rx="8" fill="#fff" stroke="#aaa" stroke-width="1.6"/>
+<text x="900.0" y="438" font-size="12.5" font-weight="bold" fill="#222" text-anchor="middle">40 × 2048</text>
+<text x="900.0" y="459" font-size="11.5" font-weight="normal" fill="#444" text-anchor="middle">文本 token</text>
+<line x1="380" y1="445" x2="426" y2="445" stroke="#555" stroke-width="1.8" marker-end="url(#arr)"/>
+<line x1="730" y1="445" x2="776" y2="445" stroke="#555" stroke-width="1.8" marker-end="url(#arr)"/>
+<rect x="270" y="544" width="640" height="80" rx="8" fill="#fff" stroke="#555" stroke-width="1.6"/>
+<text x="590.0" y="572" font-size="14" font-weight="bold" fill="#222" text-anchor="middle">拼接：一个序列喂进语言塔</text>
+<text x="590.0" y="593" font-size="12.5" font-weight="normal" fill="#444" text-anchor="middle">image_pad（id=151669）原位替换为 256 个视觉 token</text>
+<text x="590.0" y="611" font-size="12.5" font-weight="normal" fill="#444" text-anchor="middle">seq = 256×tiles + 模板26 + 指令14 = 296 ⇒ 进塔 [B, 296, 2048]</text>
+<line x1="1044" y1="218" x2="1044" y2="584" stroke="#1f6feb" stroke-width="1.8"/>
+<line x1="1044" y1="584" x2="916" y2="584" stroke="#1f6feb" stroke-width="1.8" marker-end="url(#arrBlue)"/>
+<text x="1054" y="560" font-size="11" font-weight="normal" fill="#1f6feb" text-anchor="start">视觉 256×2048</text>
+<line x1="900" y1="476" x2="900" y2="542" stroke="#b9770e" stroke-width="1.8" marker-end="url(#arr)"/>
+<rect x="180" y="642" width="760" height="208" rx="12" fill="#f4ecf7" stroke="#7d3c98" stroke-width="2.2"/>
+<text x="560.0" y="670" font-size="14.5" font-weight="bold" fill="#7d3c98" text-anchor="middle">Qwen3 语言塔：config 共 28 层，gr00t select_layer=12 只用前 12 层</text>
+<rect x="216" y="690" width="30" height="26" rx="3" fill="#7d3c98" stroke="#7d3c98" stroke-width="0"/>
+<rect x="250" y="690" width="30" height="26" rx="3" fill="#7d3c98" stroke="#7d3c98" stroke-width="0"/>
+<rect x="284" y="690" width="30" height="26" rx="3" fill="#7d3c98" stroke="#7d3c98" stroke-width="0"/>
+<rect x="318" y="690" width="30" height="26" rx="3" fill="#7d3c98" stroke="#7d3c98" stroke-width="0"/>
+<rect x="352" y="690" width="30" height="26" rx="3" fill="#7d3c98" stroke="#7d3c98" stroke-width="0"/>
+<rect x="386" y="690" width="30" height="26" rx="3" fill="#7d3c98" stroke="#7d3c98" stroke-width="0"/>
+<rect x="420" y="690" width="30" height="26" rx="3" fill="#7d3c98" stroke="#7d3c98" stroke-width="0"/>
+<rect x="454" y="690" width="30" height="26" rx="3" fill="#7d3c98" stroke="#7d3c98" stroke-width="0"/>
+<rect x="488" y="690" width="30" height="26" rx="3" fill="#7d3c98" stroke="#7d3c98" stroke-width="0"/>
+<rect x="522" y="690" width="30" height="26" rx="3" fill="#7d3c98" stroke="#7d3c98" stroke-width="0"/>
+<rect x="556" y="690" width="30" height="26" rx="3" fill="#7d3c98" stroke="#7d3c98" stroke-width="0"/>
+<rect x="590" y="690" width="30" height="26" rx="3" fill="#7d3c98" stroke="#7d3c98" stroke-width="0"/>
+<text x="640" y="710" font-size="18" font-weight="normal" fill="#c0392b" text-anchor="middle">✂</text>
+<rect x="664" y="690" width="30" height="26" rx="3" fill="#f2f2f2" stroke="#bbb" stroke-width="0"/>
+<rect x="664" y="720" width="30" height="26" rx="3" fill="#f2f2f2" stroke="#bbb" stroke-width="0"/>
+<rect x="698" y="690" width="30" height="26" rx="3" fill="#f2f2f2" stroke="#bbb" stroke-width="0"/>
+<rect x="698" y="720" width="30" height="26" rx="3" fill="#f2f2f2" stroke="#bbb" stroke-width="0"/>
+<rect x="732" y="690" width="30" height="26" rx="3" fill="#f2f2f2" stroke="#bbb" stroke-width="0"/>
+<rect x="732" y="720" width="30" height="26" rx="3" fill="#f2f2f2" stroke="#bbb" stroke-width="0"/>
+<rect x="766" y="690" width="30" height="26" rx="3" fill="#f2f2f2" stroke="#bbb" stroke-width="0"/>
+<rect x="766" y="720" width="30" height="26" rx="3" fill="#f2f2f2" stroke="#bbb" stroke-width="0"/>
+<rect x="800" y="690" width="30" height="26" rx="3" fill="#f2f2f2" stroke="#bbb" stroke-width="0"/>
+<rect x="800" y="720" width="30" height="26" rx="3" fill="#f2f2f2" stroke="#bbb" stroke-width="0"/>
+<rect x="834" y="690" width="30" height="26" rx="3" fill="#f2f2f2" stroke="#bbb" stroke-width="0"/>
+<rect x="834" y="720" width="30" height="26" rx="3" fill="#f2f2f2" stroke="#bbb" stroke-width="0"/>
+<rect x="868" y="690" width="30" height="26" rx="3" fill="#f2f2f2" stroke="#bbb" stroke-width="0"/>
+<rect x="868" y="720" width="30" height="26" rx="3" fill="#f2f2f2" stroke="#bbb" stroke-width="0"/>
+<rect x="902" y="690" width="30" height="26" rx="3" fill="#f2f2f2" stroke="#bbb" stroke-width="0"/>
+<rect x="902" y="720" width="30" height="26" rx="3" fill="#f2f2f2" stroke="#bbb" stroke-width="0"/>
+<text x="560.0" y="768" font-size="12" font-weight="normal" fill="#999" text-anchor="middle">后 16 层整段裁掉，从不执行（不是「跳过执行」，是根本没实例化进来）</text>
+<text x="560.0" y="808" font-size="12.5" font-weight="normal" fill="#555" text-anchor="middle">GQA 16Q/8KV · head_dim 128 · FFN 6144 SwiGLU · RoPE θ=10⁶</text>
+<text x="560.0" y="830" font-size="12.5" font-weight="normal" fill="#7d3c98" text-anchor="middle">tune_llm = False：全冻结 + eval（set_frozen_modules_to_eval_mode）</text>
+<rect x="160" y="880" width="250" height="58" rx="8" fill="#fff" stroke="#555" stroke-width="1.6"/>
+<text x="285.0" y="906" font-size="12.5" font-weight="bold" fill="#222" text-anchor="middle">hidden_states[12]</text>
+<text x="285.0" y="927" font-size="11.5" font-weight="normal" fill="#444" text-anchor="middle">output_hidden_states=True 取第 12 层</text>
+<rect x="450" y="880" width="230" height="58" rx="8" fill="#fff" stroke="#555" stroke-width="1.6"/>
+<text x="565.0" y="906" font-size="12.5" font-weight="bold" fill="#222" text-anchor="middle">eagle_linear = Identity</text>
+<text x="565.0" y="927" font-size="11.5" font-weight="normal" fill="#444" text-anchor="middle">project_to_dim=null ⇒ 不投影</text>
+<rect x="720" y="880" width="260" height="76" rx="8" fill="#fff" stroke="#555" stroke-width="1.6"/>
+<text x="850.0" y="906" font-size="12.5" font-weight="bold" fill="#222" text-anchor="middle">backbone_features + mask</text>
+<text x="850.0" y="927" font-size="11.5" font-weight="normal" fill="#444" text-anchor="middle">[B, 296, 2048] · mask 传而不达</text>
+<text x="850.0" y="945" font-size="11.5" font-weight="normal" fill="#444" text-anchor="middle">（06 §6.8.5：掩码进接口但未进注意力）</text>
+<line x1="560.0" y1="852" x2="560.0" y2="878" stroke="#555" stroke-width="1.8" marker-end="url(#arr)"/>
+<line x1="410" y1="920" x2="446" y2="920" stroke="#555" stroke-width="1.8" marker-end="url(#arr)"/>
+<line x1="680" y1="920" x2="716" y2="920" stroke="#555" stroke-width="1.8" marker-end="url(#arr)"/>
+<rect x="720" y="988" width="250" height="54" rx="8" fill="#eafaf1" stroke="#1e8449" stroke-width="1.6"/>
+<text x="845.0" y="1012" font-size="12" font-weight="bold" fill="#222" text-anchor="middle">下游 → DiT action head</text>
+<text x="845.0" y="1033" font-size="11.5" font-weight="normal" fill="#444" text-anchor="middle">当 cross-attn 的 K/V（06 §6.8）</text>
+<line x1="845" y1="976" x2="845" y2="984" stroke="#1e8449" stroke-width="1.8" marker-end="url(#arrGreen)"/>
+<rect x="1180" y="88" width="350" height="134" rx="8" fill="#fff" stroke="#aaa" stroke-width="1.6"/>
+<text x="1355.0" y="116" font-size="13.5" font-weight="bold" fill="#222" text-anchor="middle">token 账（复跑 tools/token_ledger_eagle.py）</text>
+<text x="1355.0" y="137" font-size="12" font-weight="normal" fill="#444" text-anchor="middle">单相机 224²：256+26+14 = 296</text>
+<text x="1355.0" y="155" font-size="12" font-weight="normal" fill="#444" text-anchor="middle">空指令：282 · 三相机：768+45 = 813</text>
+<text x="1355.0" y="173" font-size="12" font-weight="normal" fill="#444" text-anchor="middle">（模板不随图数套 26，每加图约半成）</text>
+<text x="1355.0" y="191" font-size="12" font-weight="normal" fill="#444" text-anchor="middle">640×640 → 10 tiles → 2586</text>
+<text x="1355.0" y="209" font-size="12" font-weight="normal" fill="#444" text-anchor="middle">640×400 → 7 tiles → 1818</text>
+<rect x="1180" y="240" width="350" height="116" rx="8" fill="#eafaf1" stroke="#1e8449" stroke-width="1.6"/>
+<text x="1355.0" y="268" font-size="13.5" font-weight="bold" fill="#1e8449" text-anchor="middle">NPU 补丁落点（本章全蓝/橙处）</text>
+<text x="1355.0" y="289" font-size="12" font-weight="normal" fill="#444" text-anchor="middle">视觉塔 conv2d + 3×NPU_Siglip*（图 5-1）</text>
+<text x="1355.0" y="307" font-size="12" font-weight="normal" fill="#444" text-anchor="middle">Qwen3 层 6 个补丁（Attention/MLP 等）</text>
+<text x="1355.0" y="325" font-size="12" font-weight="normal" fill="#444" text-anchor="middle">mlp1 → NPULinear（gemm_bias）</text>
+<text x="1355.0" y="343" font-size="12" font-weight="normal" fill="#444" text-anchor="middle">09 §3.5 · v0.2 交付口径</text>
+<rect x="1180" y="374" width="350" height="116" rx="8" fill="#fff" stroke="#aaa" stroke-width="1.6"/>
+<text x="1355.0" y="402" font-size="13.5" font-weight="bold" fill="#222" text-anchor="middle">推理期视角（09 §7 对账前置）</text>
+<text x="1355.0" y="423" font-size="12" font-weight="normal" fill="#444" text-anchor="middle">一次 get_action 视觉+语言塔只跑一次</text>
+<text x="1355.0" y="441" font-size="12" font-weight="normal" fill="#444" text-anchor="middle">296 token 全序列进 12 层 ≈ prefill；</text>
+<text x="1355.0" y="459" font-size="12" font-weight="normal" fill="#444" text-anchor="middle">去噪循环复用其特征 —— 与 06 §6.7</text>
+<text x="1355.0" y="477" font-size="12" font-weight="normal" fill="#444" text-anchor="middle">prefill/decode 同构结论的出处</text>
+<rect x="1180" y="508" width="350" height="98" rx="8" fill="#fff" stroke="#aaa" stroke-width="1.6"/>
+<text x="1355.0" y="536" font-size="13.5" font-weight="bold" fill="#222" text-anchor="middle">forward 接口约定</text>
+<text x="1355.0" y="557" font-size="12" font-weight="normal" fill="#444" text-anchor="middle">eagle_ 前缀剥掉后交 VLM；image_sizes 剔除</text>
+<text x="1355.0" y="575" font-size="12" font-weight="normal" fill="#444" text-anchor="middle">输出键固定 backbone_features /</text>
+<text x="1355.0" y="593" font-size="12" font-weight="normal" fill="#444" text-anchor="middle">backbone_attention_mask（04 validate_data）</text>
+</svg>

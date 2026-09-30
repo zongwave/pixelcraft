@@ -1,10 +1,10 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1560" height="1210" viewBox="0 0 1560 1210" font-family="Helvetica, Arial, 'Noto Sans CJK SC', 'WenQuanYi Zen Hei', sans-serif">
 <defs><marker id="arr" markerWidth="10" markerHeight="10" refX="7" refY="3" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L8,3 L0,6 Z" fill="#555"/></marker><marker id="arrRed" markerWidth="10" markerHeight="10" refX="7" refY="3" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L8,3 L0,6 Z" fill="#c0392b"/></marker><marker id="arrGreen" markerWidth="10" markerHeight="10" refX="7" refY="3" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L8,3 L0,6 Z" fill="#1e8449"/></marker></defs>
 <rect x="0" y="0" width="1560" height="1210" rx="8" fill="#fafafa" stroke="none" stroke-width="1.6"/>
-<text x="780.0" y="42" font-size="24" font-weight="bold" fill="#222" text-anchor="middle">gr00t e2e infer Pipeline：原生 PyTorch 逐算子  vs  E200 NPU 融合算子（v0.2 交付口径）</text>
+<text x="780.0" y="42" font-size="24" font-weight="bold" fill="#222" text-anchor="middle">gr00t e2e infer Pipeline：NPU 逐算子初步接入（未融合）  vs  E200 NPU 融合算子（v0.2 交付口径）</text>
 <text x="780.0" y="68" font-size="13" font-weight="normal" fill="#666" text-anchor="middle">单 Die · 数值来源：groot_ops CHANGELOG v0.1/v0.2 与 Redmine #162 板端实测（L20 交叉机 golden 比对）</text>
 <rect x="30" y="95" width="730" height="1080" rx="12" fill="#fdecea" stroke="#e6b0aa" stroke-width="2"/>
-<text x="395.0" y="127" font-size="18" font-weight="bold" fill="#c0392b" text-anchor="middle">原生 PyTorch 逐算子（未融合 / NPU 接入基线）</text>
+<text x="395.0" y="127" font-size="18" font-weight="bold" fill="#c0392b" text-anchor="middle">NPU 逐算子初步接入（模型逻辑原生 · 未做块级融合）</text>
 <rect x="55" y="147" width="680" height="41" rx="8" fill="#fff" stroke="#aaa8" stroke-width="1.6"/>
 <text x="395.0" y="176" font-size="12" font-weight="normal" fill="#333" text-anchor="middle">输入：图像 ×N + 文本 + 本体 state</text>
 <line x1="395.0" y1="188" x2="395.0" y2="204" stroke="#555" stroke-width="1.8" marker-end="url(#arr)"/>

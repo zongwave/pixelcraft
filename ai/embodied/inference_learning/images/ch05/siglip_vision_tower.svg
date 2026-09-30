@@ -1,0 +1,76 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1260" height="880" viewBox="0 0 1260 880" font-family="Helvetica, Arial, 'Noto Sans CJK SC', 'WenQuanYi Zen Hei', sans-serif">
+<defs><marker id="arr" markerWidth="10" markerHeight="10" refX="7" refY="3" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L8,3 L0,6 Z" fill="#555"/></marker><marker id="arrRed" markerWidth="10" markerHeight="10" refX="7" refY="3" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L8,3 L0,6 Z" fill="#c0392b"/></marker><marker id="arrGreen" markerWidth="10" markerHeight="10" refX="7" refY="3" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L8,3 L0,6 Z" fill="#1e8449"/></marker><marker id="arrBlue" markerWidth="10" markerHeight="10" refX="7" refY="3" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L8,3 L0,6 Z" fill="#1f6feb"/></marker></defs>
+<rect x="0" y="0" width="1260" height="880" rx="8" fill="#fafafa" stroke="none" stroke-width="1.6"/>
+<text x="630.0" y="40" font-size="23" font-weight="bold" fill="#222" text-anchor="middle">GR00T-N1.5 视觉塔本体：SigLIP ViT（so400m 系）结构框图</text>
+<text x="630.0" y="66" font-size="12.5" font-weight="normal" fill="#666" text-anchor="middle">数字来源：eagle2_hg_model/config.json + 官方 ckpt 权重头实测（2026-09-29）· 单 tile 视角 · demo 单相机 = 3 tile 并行同构</text>
+<rect x="60" y="92" width="700" height="80" rx="8" fill="#fff" stroke="#aaa" stroke-width="1.6"/>
+<text x="410.0" y="120" font-size="13.5" font-weight="bold" fill="#222" text-anchor="middle">输入：单 tile</text>
+<text x="410.0" y="141" font-size="12.5" font-weight="normal" fill="#444" text-anchor="middle">一个 tile = 224×224×3（tiling 后每 tile 定尺缩进）</text>
+<text x="410.0" y="159" font-size="12.5" font-weight="normal" fill="#444" text-anchor="middle">demo 单相机 224×224 → 1×1 网格 1 个 tile（use_thumbnail，1×1 时缩略图不计）</text>
+<line x1="410.0" y1="172" x2="410.0" y2="190" stroke="#555" stroke-width="1.8" marker-end="url(#arr)"/>
+<rect x="60" y="192" width="700" height="80" rx="8" fill="#eaf2fd" stroke="#1f6feb" stroke-width="1.6"/>
+<text x="410.0" y="220" font-size="13.5" font-weight="bold" fill="#1f6feb" text-anchor="middle">① patch-embed（视觉塔唯一的卷积）</text>
+<text x="410.0" y="241" font-size="12.5" font-weight="normal" fill="#444" text-anchor="middle">Conv2d kernel 14×14 / stride 14，权重 [1152, 3, 14, 14]</text>
+<text x="410.0" y="259" font-size="12.5" font-weight="normal" fill="#444" text-anchor="middle">224 / 14 = 16 ⇒ 16×16 = 256 个 patch，展平 3·14·14 = 588 → 投到 1152</text>
+<line x1="410.0" y1="272" x2="410.0" y2="290" stroke="#555" stroke-width="1.8" marker-end="url(#arr)"/>
+<rect x="60" y="292" width="700" height="80" rx="8" fill="#eaf2fd" stroke="#1f6feb" stroke-width="1.6"/>
+<text x="410.0" y="320" font-size="13.5" font-weight="bold" fill="#1f6feb" text-anchor="middle">② + 位置编码（embeddings = patch + PE）</text>
+<text x="410.0" y="341" font-size="12.5" font-weight="normal" fill="#444" text-anchor="middle">学习式绝对 PE，权重 [256, 1152]：无 CLS 位、无 RoPE</text>
+<text x="410.0" y="359" font-size="12.5" font-weight="normal" fill="#444" text-anchor="middle">tile 定尺 224 ⇒ 位置格固定 16×16，任何分辨率都先归格，无需插值</text>
+<line x1="410.0" y1="372" x2="410.0" y2="390" stroke="#555" stroke-width="1.8" marker-end="url(#arr)"/>
+<rect x="60" y="392" width="700" height="250" rx="12" fill="#ffffff" stroke="#1f6feb" stroke-width="2.2"/>
+<text x="410.0" y="420" font-size="15" font-weight="bold" fill="#1f6feb" text-anchor="middle">③ × 27 Transformer block（pre-LN · encoder-only · 无 causal mask）</text>
+<rect x="100" y="440" width="130" height="46" rx="8" fill="#f2f2f2" stroke="#999" stroke-width="1.6"/>
+<text x="165.0" y="469" font-size="12.5" font-weight="normal" fill="#222" text-anchor="middle">LayerNorm₁</text>
+<line x1="230" y1="463" x2="254" y2="463" stroke="#555" stroke-width="1.8" marker-end="url(#arr)"/>
+<rect x="254" y="440" width="250" height="46" rx="8" fill="#eaf2fd" stroke="#1f6feb" stroke-width="1.6"/>
+<text x="379" y="460" font-size="12.5" font-weight="normal" fill="#1f6feb" text-anchor="middle">MHSA · 16 头 · 1152</text>
+<text x="379" y="478" font-size="11" font-weight="normal" fill="#666" text-anchor="middle">建模代码强制 flash_attention_2</text>
+<line x1="504" y1="463" x2="528" y2="463" stroke="#555" stroke-width="1.8" marker-end="url(#arr)"/>
+<circle cx="550" cy="463" r="13" fill="#fff" stroke="#555" stroke-width="1.8"/>
+<text x="550" y="468" font-size="15" font-weight="bold" fill="#222" text-anchor="middle">⊕</text>
+<line x1="84" y1="463" x2="84" y2="570" stroke="#999" stroke-width="1.8" stroke-dasharray="5,4"/>
+<line x1="84" y1="463" x2="100" y2="463" stroke="#999" stroke-width="1.8" stroke-dasharray="5,4"/>
+<line x1="84" y1="570" x2="535" y2="570" stroke="#999" stroke-width="1.8" stroke-dasharray="5,4" marker-end="url(#arr)"/>
+<line x1="550" y1="476" x2="550" y2="570" stroke="#999" stroke-width="1.4" stroke-dasharray="5,4"/>
+<text x="84" y="518" font-size="11" font-weight="normal" fill="#999" text-anchor="middle">残差</text>
+<rect x="100" y="566" width="130" height="46" rx="8" fill="#f2f2f2" stroke="#999" stroke-width="1.6"/>
+<text x="165.0" y="595" font-size="12.5" font-weight="normal" fill="#222" text-anchor="middle">LayerNorm₂</text>
+<line x1="230" y1="589" x2="254" y2="589" stroke="#555" stroke-width="1.8" marker-end="url(#arr)"/>
+<rect x="254" y="566" width="250" height="46" rx="8" fill="#eafaf1" stroke="#1e8449" stroke-width="1.6"/>
+<text x="379" y="586" font-size="12.5" font-weight="normal" fill="#1e8449" text-anchor="middle">MLP 1152 → 4304 → 1152</text>
+<text x="379" y="604" font-size="11" font-weight="normal" fill="#666" text-anchor="middle">激活 gelu_pytorch_tanh</text>
+<line x1="504" y1="589" x2="528" y2="589" stroke="#555" stroke-width="1.8" marker-end="url(#arr)"/>
+<circle cx="550" cy="589" r="13" fill="#fff" stroke="#555" stroke-width="1.8"/>
+<text x="550" y="594" font-size="15" font-weight="bold" fill="#222" text-anchor="middle">⊕</text>
+<text x="580" y="594" font-size="12" font-weight="normal" fill="#555" text-anchor="start">→ 下一层输入 256×1152</text>
+<line x1="410.0" y1="642" x2="410.0" y2="660" stroke="#555" stroke-width="1.8" marker-end="url(#arr)"/>
+<rect x="60" y="662" width="700" height="62" rx="8" fill="#f2f2f2" stroke="#999" stroke-width="1.6"/>
+<text x="410.0" y="690" font-size="13.5" font-weight="bold" fill="#222" text-anchor="middle">④ post_layernorm</text>
+<text x="410.0" y="711" font-size="12.5" font-weight="normal" fill="#444" text-anchor="middle">encoder 尾部的全局 LayerNorm（ckpt 键 post_layernorm.*，pre-LN 架构的出口归一）</text>
+<line x1="410.0" y1="724" x2="410.0" y2="742" stroke="#555" stroke-width="1.8" marker-end="url(#arr)"/>
+<rect x="60" y="744" width="700" height="80" rx="8" fill="#fdf6e3" stroke="#b9770e" stroke-width="1.6"/>
+<text x="410.0" y="772" font-size="13.5" font-weight="bold" fill="#b9770e" text-anchor="middle">输出：256 × 1152 / tile（无 CLS · 无洗牌）</text>
+<text x="410.0" y="793" font-size="12.5" font-weight="normal" fill="#444" text-anchor="middle">→ mlp1 = Linear(1152 → 2048)，逐 patch 单发直通（§2.6，权重 [2048,1152] 终审）</text>
+<text x="410.0" y="811" font-size="12.5" font-weight="normal" fill="#444" text-anchor="middle">→ 256 个 2048 维视觉 token，挤进语言塔门口的 image_pad 位（图 5-2）</text>
+<rect x="800" y="92" width="410" height="134" rx="8" fill="#eafaf1" stroke="#1e8449" stroke-width="1.6"/>
+<text x="1005.0" y="120" font-size="13.5" font-weight="bold" fill="#1e8449" text-anchor="middle">09 §3.5 补丁表在本图对号入座</text>
+<text x="1005.0" y="141" font-size="12" font-weight="normal" fill="#444" text-anchor="middle">conv2d_patch_embed        → ①</text>
+<text x="1005.0" y="159" font-size="12" font-weight="normal" fill="#444" text-anchor="middle">NPU_SiglipVisionEmbeddings → ①+②</text>
+<text x="1005.0" y="177" font-size="12" font-weight="normal" fill="#444" text-anchor="middle">NPU_SiglipVisionAttention  → MHSA</text>
+<text x="1005.0" y="195" font-size="12" font-weight="normal" fill="#444" text-anchor="middle">NPU_SiglipVisionMLP        → MLP</text>
+<text x="1005.0" y="213" font-size="12" font-weight="normal" fill="#444" text-anchor="middle">（融合核 mlp_gelu 吃的正是 gelu_pytorch_tanh）</text>
+<line x1="792" y1="92" x2="792" y2="226" stroke="#1e8449" stroke-width="3"/>
+<rect x="800" y="246" width="410" height="134" rx="8" fill="#fdecea" stroke="#c0392b" stroke-width="1.6"/>
+<text x="1005.0" y="274" font-size="13.5" font-weight="bold" fill="#c0392b" text-anchor="middle">为什么这套结构对畸变「形状失明」</text>
+<text x="1005.0" y="295" font-size="12.5" font-weight="normal" fill="#444" text-anchor="middle">PE 固定在 16×16 格、patch 定尺 14×14：</text>
+<text x="1005.0" y="313" font-size="12.5" font-weight="normal" fill="#444" text-anchor="middle">几何畸变（如 02 §7 的内容拉伸 1.6×）不改变</text>
+<text x="1005.0" y="331" font-size="12.5" font-weight="normal" fill="#444" text-anchor="middle">任何张量形状——错误内容被摊进正确的格子，</text>
+<text x="1005.0" y="349" font-size="12.5" font-weight="normal" fill="#444" text-anchor="middle">形状级监控天然失明，必须往像素/内容层查</text>
+<text x="1005.0" y="367" font-size="12.5" font-weight="normal" fill="#444" text-anchor="middle">（02 §7.4 事故 → 这里的机制版解释）</text>
+<rect x="800" y="400" width="410" height="98" rx="8" fill="#fff" stroke="#aaa" stroke-width="1.6"/>
+<text x="1005.0" y="428" font-size="13.5" font-weight="bold" fill="#222" text-anchor="middle">冻结开关（§3）</text>
+<text x="1005.0" y="449" font-size="12.5" font-weight="normal" fill="#444" text-anchor="middle">tune_visual = True：视觉塔可训（本节图内全蓝）</text>
+<text x="1005.0" y="467" font-size="12.5" font-weight="normal" fill="#444" text-anchor="middle">桥 mlp1 属 tune_projector 训练的投影件</text>
+<text x="1005.0" y="485" font-size="12.5" font-weight="normal" fill="#444" text-anchor="middle">推理期两者都 eval + 冻结在 ckpt 权重上</text>
+</svg>

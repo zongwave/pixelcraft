@@ -273,7 +273,8 @@ contiguous/permute。右下红框原为"§6.7 未落地项"，现已改为**该�
    `out_q=[N_q,M_q]`，不满足直接 `TVM_FFI_THROW`。**宁可当场抛，不要静默算错**——
    这与 §3.5 守卫"宁可回退，不要勉强融合"是一体两面。
 3. **省发射 ≠ 省时间。** v0.2 tag 稳态 0.14 s/round（板端 v0.2-fix 线现已 ~0.113 s/round，
-   device 1 / inject3 口径，别与 tag 口径混用），而 profile 里 `to_lpu` 累计 6148 ms、
+   device 1 / inject3 口径，别与 tag 口径混用；v0.2-fix 的**定稿纯净树口径是 0.122 s**，
+   0.113/0.122/0.174 三数换算见 §10.3 表后脚注），而 profile 里 `to_lpu` 累计 6148 ms、
    `page_kv` 1691 ms（`page_kv` 是把 k/v 搬回 host 重排成 paged 再传上去，`attention.py:306-314`）。
    两个数同时成立恰恰说明：**剩余瓶颈在 host↔device 往返，不在算力**。单 Die 的
    `unified_mha` 稠密非分页路径（`attention.py:278-287`）就是为了绕开 `page_kv` 而生。
@@ -285,22 +286,31 @@ contiguous/permute。右下红框原为"§6.7 未落地项"，现已改为**该�
   甚至 `get_action` 的整条去噪循环被包装成更高效的版本，并对 `prepare_input` 做"state 前移 + 与 backbone 重叠"。
 - 好处：**模型结构、训练/推理接口、数据流（第 01-08 章）完全不变**，只换"底下的算子实现"。
 
-## 6. 实测对比：原生 PyTorch pipeline vs NPU 融合算子 pipeline
+## 6. 实测对比：NPU 逐算子初步接入（未融合）vs NPU 融合算子 pipeline
 
 ![gr00t e2e 原生 PyTorch vs NPU 融合算子 pipeline 对比](images/ch09/npu_pipeline_native_vs_fused.svg)
 *图 9-5：自绘（`tools/mk_fig_ch09_pipeline_compare.py`）——已按 tag 实测校正 op 归属：
 `randn_normal`、`dit_action_head`、`dit_action_tail`、`euler_tail` 属 `v0.4`，在图中显式标 `[v0.4]`。*
 
-上图左列为 gr00t n1.5 e2e 推理的原生 PyTorch 逐算子 pipeline（H20 单卡 profile 口径），
-右列为经 `transformers_npu` 补丁 + `groot_ops` 融合算子改写后的 pipeline：
+上图左列为 **NPU 逐算子初步接入**的 gr00t n1.5 e2e pipeline——模型逻辑仍是原生组织方式，
+但每个算子已逐个换成 NPU kernel，**尚未做块级/大粒度融合**（E200 单 Die 实测）；
+右列为经 `transformers_npu` 补丁 + `groot_ops` 块级融合改写后的 pipeline：
 
-- **端到端**：单步推理 0.826s → v0.1 0.697s → v0.2 0.14s（**−83%，约 5.9×**）；
+> **[!] 勘误（基线归属）**：本章早先把左列 0.826 s 标成"原生 PyTorch 在 H20 单卡的 profile 口径"。
+> 实为 **NPU 接入算子后的初步测试结果**（逐算子接入、未做大粒度融合），本来就跑在 E200 上——
+> 图 9-5 脚本的左列注记（"未融合 / NPU 接入基线"）一直是对的，错在正文叙述。
+> 真正的**纯 GPU 原生 PyTorch 参照是 L20 上的 0.686 s/轮**（附录 A.2 / 第 13 章 §3.4 的 TRT 同机
+> A/B 基线），两者不是一回事。教训仍是 §4.2 那句：**能核实的事实归属，就不要靠记忆写**。
+
+- **端到端**：单步推理 0.826 s（逐算子初步接入）→ 0.697 s（v0.1）→ 0.14 s（v0.2）（**−83%，约 5.9×**）；
 - **设备利用率**：device busy 13% → 51%——融合消掉了大量小算子启动与访存往返，瓶颈从"调度空隙"回到计算本身；
 - **数据搬运**：H2D 1.65GB 基本不变（IO 未变），但算子间 `contiguous/permute` 类拷贝核减少 88–93%（`to_head_major_k` 963 次 → 0）；
 - **精度**：融合路径输出与原生 golden 余弦相似度 ≥ 0.99999。
 
 > 口径说明：单 Die E200、e2e infer（1 步去噪 × batch 1）；v0.1/v0.2 指标来自 groot_ops CHANGELOG 与
 > Redmine #162 的 profile 记录，图为示意重绘，算子分组做了归并。
+>
+> 并入 TensorRT(L20) 后的**三方对比总表见附录 A.4**，优化方法学对照见附录 A.5。
 
 ## 7. 对账：第 06 章的结论，kernel 认不认？
 
@@ -320,7 +330,8 @@ contiguous/permute。右下红框原为"§6.7 未落地项"，现已改为**该�
 
 **一句话总结**：8 条全部得到 kernel 级印证；唯一在 v0.2 tag 上没落地的第 1 条，
 **已在 2026-09-24 板端实现并验证**（`kv_from_nh1==2` 第三态，8 次计算 + 24 次复用，
-ON/OFF 输出**逐位一致 `maxdiff=0.0`**，`round 0.113 s(OFF) vs 0.114 s(ON)` ⇒ **无端到端收益**）。
+ON/OFF 输出**逐位一致 `maxdiff=0.0`**，`round 0.113 s(OFF) vs 0.114 s(ON)` ⇒ **无端到端收益**；
+这两个数是同板 A/B 口径，与 §10.3 账本里定稿的 0.122 s 是同一份代码的不同口径，换算见该表脚注）。
 实现细节、三个原坑的兑现方式与落地时新暴露的第 4~6 个坑，全部记在**第 06 章 §6.7 附录「落地实况」**。
 
 这次"预测 → 实现 → 实测无收益"的闭环比优化本身更值钱，它坐实了三件事
@@ -426,12 +437,22 @@ v0.2 的 3cam golden：`action_pred` 0.99999 / `left_hand` 0.99200 / `right_hand
 | 阶段 | 数字 | 口径 |
 |---|---|---|
 | 接入初期（算子覆盖 100% 那天） | 6.6 → 5.9 → 4.9 s/轮 | 首版 call-site 接入，双 Die 未收口 |
-| 原生 PyTorch 参照 | 0.826 s/轮，device busy ≈13% | 单 Die、e2e infer（1 步去噪 × batch 1），H20 profile 口径（§6 图 9-5） |
+| v0.1 前基线（NPU 逐算子接入，**未融合**） | 0.826 s/轮，device busy ≈13% | E200 单 Die、e2e infer（1 步去噪 × batch 1），§6 图 9-5 左列口径；**[!] 旧版误标"原生 PyTorch/H20"，勘误见 §6** |
+| 原生 PyTorch 参照（纯 GPU） | 0.686 s/轮，roofline 达成率 ~2% | **L20** 同机 TRT A/B 的基线（附录 A.2、第 13 章 §3.4）——不是 §6 图 9-5 左列 |
 | **v0.1**（§6 表：布局/常驻/残差/去逐 op 同步） | **0.697 s/轮**，FULL cos 0.99338 **逐位持平** | 干净板背靠背 6 轮 mean；精度 A 口径 + 固定噪声 seed |
 | 动作头专项段（DiT + head） | 0.981 → **0.328 s/轮（−67%）**，FULL cos 0.99338 → 0.99344 | 同板 A/B + 受控归因；含 §4.3 的 ①–⑤ 五条 |
 | **v0.2**（tag `gr00t 57ca788` / `groot_ops 7df9a04`） | **0.14 s/轮**，busy ≈51% | step1 稳态 87.1 ms device / 171 ms wall、641 kernel（§7 基线表口径） |
 | v0.2-fix 定稿 | **0.122 s/轮**；`action_pred` vs CPU **0.999995**、vs L20 **0.999998** | 纯净 tag 工作树（`git worktree`，无工作区改动） |
 | 稳定性 | 1000/1000 轮无崩溃无 NaN；稳态中位 0.174 s（60 轮短压） | E100 单 Die、三相机 golden；**尖峰全部归因给共享板抢占** |
+
+> **脚注：同一份 v0.2-fix 代码的三个数字（0.113 / 0.122 / 0.174）怎么读**——差别全在板况与压测口径，
+> **不是三次性能变化**：
+> **0.122 s/轮** = 验收口径，纯净 tag `git worktree`、无工作区改动（本表"定稿"行）；
+> **0.113 s/轮** = 开发/实验口径，板端 v0.2-fix 线 + device 1 / inject3（§4.3），§7 的 KV 缓存
+> ON/OFF 同板 A/B（0.113 vs 0.114）与附录 A.3 的"≈ L20-TRT"引用的都是这一口径——A/B 两侧同口径，
+> 所以结论只依赖两者之差，与 0.122 无冲突；
+> **0.174 s/轮** = 共享板 60 轮短压中位（E100、三相机 golden），含抢占干扰，尖峰已全部归因给抢占。
+> 三者**禁止互比来判回退/提升**；跨版本结论只用本表内同口径行（即下面纪律②在本表的应用例）。
 
 **口径纪律三条**（写进这一章是因为它被违反过、也救过我们）：
 ① 共享板卡上墙钟不可信 ⇒ 验收优先看 **kernel 数 / call-count / launch 数 / busy 比**；
@@ -464,6 +485,74 @@ v0.2 的 3cam golden：`action_pred` 0.99999 / `left_hand` 0.99200 / `right_hand
    （`tools/trace_kv_cache_diff.py`）。等 1/2 两项落地，它省下的 6.8 ms/step 会自动兑现成端到端收益——
    **"正确但非当期"也要留在可 A/B 的状态，而不是删掉。**
 
+### 10.6 Perfetto 三轨对比图：旧融合链 vs 当前热轮 vs 当前冷轮（2026-09-30 实测补记）
+
+![perf trace 三轨对比：旧融合链 vs 当前热轮 vs 当前冷轮](images/ch09/npu_perfetto_three_way_compare.png)
+*图 9-7：自绘（`tools/mk_fig_ch09_perfetto_compare.py`，直接解析三份 chrome trace 原文件）。
+上半三行是设备时间线（蓝=kernel、橙=HtoD、红=DtoH，每行各自刻度）；左下是同栏账目（log 刻度）；
+右下是当前热轮的解剖条。三份 trace 均可直接拖进 Perfetto（ui.perfetto.dev）逐条核对。*
+
+**Perfetto 原生界面截图**（图 9-8，v58.2 本地 UI + 无头 Chrome 自动抓取，
+`tools/mk_fig_ch09_perfetto_snapshots.py`；"局部特写"的做法=把时间窗裁成子 trace 再加载，UI 自动 fit 到该窗）：
+
+| (a) OLD 全程 5.2 s：947 个小簇被 gap 撑开，HtoD/同步海洋 | (b) OLD t≈4.45 s：38 ms `KernelCloneTranspose` 迭代边界 |
+|---|---|
+| ![OLD 全程 Perfetto 原生时间线](images/ch09/perfetto_old_overview.png) | ![OLD 迭代边界特写](images/ch09/perfetto_old_iter_edge.png) |
+| **(c) CUR 热轮全程 153 ms：prologue + 4 个去噪步（绿色概览条的 4 簇）** | **(d) CUR 单去噪步 13.9 ms：16×(adaln→m→a→m) block 指纹，块间 launch gap 肉眼可见** |
+| ![CUR 全程 Perfetto 原生时间线](images/ch09/perfetto_cur_overview.png) | ![CUR 单去噪步特写](images/ch09/perfetto_cur_step.png) |
+| **(e) NEW 冷轮全程 1.39 s：同批 kernel 被 host 首帧路径摊开** | |
+| ![NEW 冷轮全程 Perfetto 原生时间线](images/ch09/perfetto_new_overview.png) | |
+
+> 截图脚本环境搭法（一次性）：`pip install playwright`；官方 CDN 不可达时从 npmmirror 拉
+> Chrome-for-Testing(linux-arm64) 解到 `~/.cache/ms-playwright/cft-153/`；ui.perfetto.dev 本身会被
+> 其 CSP（`connect-src` 只放 localhost 固定端口）与首屏 wasm 慢加载卡住——脚本改为把官方
+> `perfetto-ui.zip`（GitHub release，走 gh-proxy 镜像）解到 `~/.cache/perfetto-ui/` 本地托管，
+> 同一 HTTP 服务 `/traces/*` 与 UI 同源加载，CSP 自然放行。
+
+三份 profile 产物（同一 SD3-DiT 主链的板端 pytorch/LPU trace，落盘 `~/wzong/workspace/embodied/logs/`）：
+
+| 轨 | 文件 | 场景 |
+|---|---|---|
+| OLD | `trace_3cam_2iter_ae_fused_k67/wzong_sd3_2iter_chrome_trace.json` | 2026-09-08 旧融合链，3-cam、2 iter |
+| CUR | `trace_current_clean/n15_sd3_chrome_trace.json` | 当前干净热轮 |
+| NEW | `wz_prof_current_20260930_145846/trace/n15_sd3_chrome_trace.json` | 当天新抓**冷轮**（首次 infer） |
+
+关键数字（脚本聚合自 trace 原文件，merge 后 busy）：
+
+| 指标 | OLD | CUR（热） | NEW（冷） |
+|---|---|---|---|
+| 设备侧跨度 | 5194 ms（2 iter） | **152.9 ms** | 1387.6 ms |
+| device busy / 利用率 | 493 ms / **9.5%** | 80.1 ms / **52.4%** | 80.2 ms / 5.8% |
+| kernel 数 / 种类 | 1923 / 39 | 617 / 27 | 617 / 27 |
+| Memcpy HtoD | **702 次 / 174.4 ms** | 12 次 / 0.13 ms | 12 次 / 0.13 ms |
+| `KernelCloneTranspose` | **136 次 / 134.6 ms**（含 2×38 ms） | **0** | **0** |
+| `evStreamSynchronize` | 768 次 / 308.9 ms | 15 次 / 1.3 ms | 15 次 / 78 ms（冷） |
+| `evConfigureCall` | 10.3 ms | 1.25 ms | **988 ms**（616 次，avg 1.6 ms） |
+
+**三条结构性结论**（按 §10.3 纪律①，只看次数/逐 kernel 时长/gap 位置，不比 wall-clock）：
+
+1. **OLD → CUR 的收益全是"消失的列"**：每迭代重搬权重的 702×HtoD（174 ms）和每迭代 2×38 ms 的
+   `KernelCloneTranspose` 巨型 split 转换在热轮里**整列归零**——§10.5 欠账第 2 条（"CloneTranspose
+   占设备大头"）在这条 n15_sd3 主链上已兑现；768 次逐 op 全设备同步换成 15 次边界同步后，
+   947 个被 ≈40 ms gap 撑开的设备小簇塌缩成 15 个簇，利用率 9.5% → 52.4%。
+   迭代边界本身在 trace 里可见：两次 38 ms CloneTranspose 落在 t≈4.6 ms 与 t≈4455 ms
+   （iter1 ≈4.45 s 冷路径 + iter2 ≈0.74 s）。
+2. **冷轮慢 9× 但 GPU 一点没变慢**：NEW 与 CUR 的 kernel **逐 op 对齐**（617 个、busy 80.2 vs 80.1 ms），
+   多出的 1.23 s 全在 host 首帧路径（`evConfigureCall` 616 次共 988 ms、`evMemcpyAsync` avg 4.8 ms、
+   sync avg 5.2 ms）。⇒ 这是**首 infer 延迟**（warmup/预热可消），不是稳态回退——与第 13 章
+   "秒第 2+ 轮稳态、首轮是一次性 lazy init"的口径纪律同源。
+3. **热轮的剩余账**（下一步收益排序，图右下）：① prologue 55.4 ms（siglip2 视觉塔 + qwen3 LM，
+   `gemm_bias_run_die`×121 共 10 ms 是最大单项），占 e2e 36%；② 4 个去噪步之间 host gap
+   ≈5.9 ms/次 ×3；③ 每步簇内 51 个 op 之间的 launch gap 5.2 ms（avg 103 µs，簇内利用率仅 ~55%）。
+   每步构成固定：`adaln_qkv×16 + mlp_gelu_norm×16 + fused_mha_out×16`（16 block × 4 去噪步，
+   与第 06 章 §6.7 的 64 次 cross 对位）；另注意每步**首个** `adaln_qkv` 0.46 ms vs 稳态 0.25 ms，
+   Perfetto 里放大 t≈63.5 ms 处可查 shape/路由差异。
+
+> 复现：图 9-7 `python3 tools/mk_fig_ch09_perfetto_compare.py [OLD CUR NEW]`（缺省用表内三份路径）；
+> 图 9-8 `python3 tools/mk_fig_ch09_perfetto_snapshots.py`（本地 UI + 无头 Chrome 全自动，见上面的环境搭法）。
+> 交互对照直接把三份 json 拖进 <https://ui.perfetto.dev>（或本地 `~/.cache/perfetto-ui` 起服务），用
+> `select name, sum(dur) from slice group by name` 对账本，用 timeline 看 gap 结构。
+
 ## 11. 本章小结
 
 - 加速在**算子/模块**两层进行，核心是**运行期打补丁**（`PatchesManager`），不改模型源码。
@@ -471,13 +560,15 @@ v0.2 的 3cam golden：`action_pred` 0.99999 / `left_hand` 0.99200 / `right_hand
   T1 懒上设备 + 常量预计算（t 只有 4 值 ⇒ temb/pe/scale_shift 全常驻）→
   T2 每层落到具体 kernel（守卫即契约，不满足就静默回退）。
 - **融合的收益主要是"少一次 host→device 往返"**，不是省 FLOP：960 → 192 → 64 次发射/轮，
-  0.826 s → 0.14 s/round；剩下的硬骨头仍是 `to_lpu`/`page_kv` 这类 host 往返。
+  0.826 s（NPU 逐算子初步接入）→ 0.14 s/round；剩下的硬骨头仍是 `to_lpu`/`page_kv` 这类 host 往返。
 - **布局与 dtype 是 ABI 不是风格**：fp16 主链（bf16 无 split 互转）、`[2,*]` die 轴复刻、
   单 Die 必须 `INIT_SINGLE_DIE`、V 的转置布局由 kernel 硬校验。
 - **版本号也是契约**：op 集合可以直接 `git ls-tree` 出来，本章 §4.2/§6 的勘误就是这么抓出来的。
 - **"能省"≠"该省"**：§6.7 的 cross K/V 缓存 2026-09-24 落地后 ON/OFF 逐位一致、**e2e 无收益**——
   省掉最肥的 GEMM 也看不见，因为瓶颈是 host 往返。**先量瓶颈，再做常量提升**（第 06 章 §6.7 附录）。
 - **全局视角在 §10**：负载画像 → 四种货币 → 里程碑账本 → 三条纪律 → 欠账清单。
+- **三方对比（纯 PyTorch / TRT / NPU）合表在附录 A.4**：同一笔“前端税”账，TRT 用编译器自动清算，
+  NPU 用手工图化 + 工程纪律清算；发射单价决定融合粒度（A.5）。
 - 对读者：理解"三级入口 + 融合粒度 + 对账口径"即可，无需逐行读 `.ac` 内核。
 
 ## 本课提问（v0.2 走读 · 待作答）
@@ -554,7 +645,8 @@ v0.2 的 3cam golden：`action_pred` 0.99999 / `left_hand` 0.99200 / `right_hand
 
 ### A.3 NPU e2e 优化判断（对照 L20-TRT 0.103 s）
 
-- 现状：E200 **单 Die** v0.2-fix ≈ 0.113 s ≈ L20-TRT，且纸面算力是 L20 的 2.1×、带宽持平；
+- 现状：E200 **单 Die** v0.2-fix ≈ 0.113 s ≈ L20-TRT（工作树/同板 A/B 口径，定稿纯净树为
+  0.122 s，换算见 §10.3 表后脚注），且纸面算力是 L20 的 2.1×、带宽持平；
 - 卡点不同：L20-TRT 卡在 kernel 执行效率（已达 16% 峰值）；**E200 卡在 host↔device 往返**
   （busy 仅 51%，`to_lpu`/`page_kv` 为大头，FFI 单次固定成本 60–150 µs vs GPU launch ~5 µs）；
 - 路线（顺序即优先级，见 §10 排序）：①往返清零（整块融合 64 发射/轮、权重/KV 常驻、去 `page_kv`）
@@ -564,6 +656,49 @@ v0.2 的 3cam golden：`action_pred` 0.99999 / `left_hand` 0.99200 / `right_hand
   但收益已埋好，往返清零后会一次性兑现；
 - 终局：两家物理下限同为 ~7 ms 档；L20 剩余空间在 FP8/量化，E200 在常驻化+双 Die——
   而**每瓦性能**（边缘功耗档 vs 350 W）才是 NPU 的胜负手。
+
+### A.4 三方对比总表（§6 与 A.2/A.3 合并；2026-09-29 按基线勘误后的口径）
+
+**先读三条表规**：① 三方基线**不同机**，同列内自比、跨列只比"数量级与瓶颈形状"，不比小数点；
+② NPU 列的"busy 比"与 TRT 列的"roofline 达成率"是**两种指标**（设备忙闲 vs 峰值算力利用率），
+不可互比；③ 标"推算"的数字未实测，禁止进 commit message。
+
+| 指标 | ① 原生 PyTorch（纯 GPU 参照） | ② TensorRT（L20） | ③ NPU 融合链（E200） |
+|---|---|---|---|
+| 硬件/口径 | L20 48GB（附录 A.2、13 章 §3.4） | L20 同机 A/B | E200 单 Die（双 Die 未收口） |
+| 端到端墙钟 | 0.686 s/轮 | **0.103 s**（6.6×） | 0.826 s（逐算子初步接入）→ 0.697（v0.1）→ 0.14（v0.2 tag）→ **0.122 s 定稿**（纯净树；工作树 A/B 口径 0.113，换算见 §10.3 脚注）；双 Die 推算 ~0.07（**未实测**） |
+| 设备效率 | roofline 达成 ~2%，busy ≈13% | 达成 ~16%（kernel 效率已是剩余瓶颈） | busy 51%（仍发射/往返 bound，非算力 bound；忙比与达成率**不同指标**） |
+| "前端税"清算方式 | 未清算：≈960 次 aten 发射/轮，单次 Python/dispatcher/autograd 开销 ≥ 计算本身 | **编译器自动**：整图编译 + kernel fusion + CUDA Graph 录制回放，host↔device 往返千次级 → 个位数 | **手工图化**：块级融合 64 次 FFI/轮（§4.3）+ 权重/常量设备常驻（§3.4）+ 恒等算子逐个消 |
+| 布局搬运 | `to_head_major_k` 963 次、`contiguous` 432.8 ms/447 | 编译器布局传播，transpose/fusion 折进 kernel 首尾，中间张量不落回 HBM | kernel **直出下家布局**（head-major、V 转置硬校验）⇒ 963→0、49.5 ms/55 |
+| 数值格式 | fp32/bf16 原生 | fp16 strongly-typed，类型由 Myelin 按固定形状自动选型 | fp16 主链——**硬件 ABI 倒逼**（bf16 无 split0↔1 设备端互转，§3.4），非风格选择 |
+| 精度对账 | golden | **本章无逐通道对账记录（空白项）** | 526-leaf：vs CPU 0.999995 / vs L20 0.999998；`left_hand` 0.992 黄灯 ⇒ INT8 门禁先卡在这里 |
+| 剩余瓶颈 | dispatch 空隙吞掉计算 | kernel 执行效率（16% 峰值后再榨 FP8/量化） | host↔device 往返（`to_lpu`/`page_kv`；FFI 单次固定成本 60–150 µs vs GPU launch ~5 µs） |
+| 物理下限/终局 | — | ~7 ms（权重带宽主导）；剩余空间 FP8 | ~7 ms（带宽持平、算力 2.1×）；剩余空间常驻化+双 Die；**胜负手是每瓦性能** |
+
+### A.5 优化方法对照：编译器自动图化 vs 手工图化 + 工程纪律
+
+一句话总纲：**两家在还同一笔账（§10.2 四种货币），差别在"谁来融合、以什么粒度融合"——
+而粒度是由单次发射的单价决定的。**
+
+| 货币/手段 | TRT 的做法 | NPU 链的做法 | 关键差异 |
+|---|---|---|---|
+| 发射次数 | CUDA Graph 整图录制回放——**一次 replay 吞掉全部细粒度 kernel**，所以 TRT 有"资格"保持 kernel 细碎 | 无图捕获可用（FFI 被 `evConfigureCall` 禁用，§10.1 末行）⇒ 只能**把块做粗**：`dit_block_fused` 整块一次 FFI（内部只是编排已验证的两段 launcher，§4.3） | GPU launch ~5 µs vs FFI 60–150 µs：**发射单价差 1–2 个数量级 ⇒ 融合粒度必须粗 1–2 个数量级** |
+| 布局字节 | 编译器全局布局传播，转置折进 kernel epilogue | 人肉布局契约：kernel 直出下家布局、`out_v=[N_q,M_kv]` 写成 FFI 硬校验 | TRT 传播是**自动的**；NPU 布局是 **ABI 契约 + 断言**（§10.4 契约三形态）|
+| host 往返/驻留 | 单卡设备，权重天然常驻——**这本账在 TRT 里不存在** | NPU 特有税：`to_lpu`/`page_kv` 的 D2H2D 往返；对策 = 权重懒上设备 + 逐 op 同步改边界同步 | 双芯片结构性差异：TRT 永远不会有的货币，恰是 NPU 的头号货币 |
+| 常量折叠 | Myelin 自动折常量、预打包权重 | **人看穿模型语义**：t 只取 4 值 ⇒ temb/pe/scale_shift 全常驻、命中率 100%；恒等 LN 规避单 Die NaN 缺陷 | 通用编译器不知道"t 只有 4 个取值"——**跨动态边界的语义级常量下沉，是手工路径对编译器的超额红利**（第 06 章 §6.7 课堂 → §7 kernel 兑现） |
+| 算力/量化 | strongly-typed fp16 由编译器选型；FP8 是下一步 | fp16 主链 + INT8 纸面 2×；但门禁在**反归一化后逐通道** cos（`left_hand` 0.992 已黄灯） | NPU 精度治理更严（闭环控制不可重试）；TRT 链在本章**欠一次同等对账** |
+| 回滚/可观测 | 引擎黑盒，只能换 builder 配置整版重编 | 零侵入 patch 可 `remove_patches()` 回滚；27 个 `GROOT_NPU_*` 逐 op A/B；profiler 与 `@op` 同名归组 | "融合 vs 非融合"的对照实验接口，TRT 给不了到单 op 粒度 |
+
+**三条收束**：
+
+1. **同一笔账的两次证明**：TRT 的 6.6× 不过是 §4.3/§9 定律在 GPU 世界的复述——它捡回的 98%
+   机器时间正是"前端税"；roofline 达成率 2%→16% 与 busy 13%→51% 是同一场战斗的两种记法。
+2. **自动化程度决定工程形态**：TRT 用编译器+生态（图捕获、自动 tiling、量化选型）换人力；
+   NPU SDK 缺这一层，就只能用**纪律**换——金丝雀断言、布局硬校验、A/B 面板、口径账本，
+   这些在 TRT 工程里根本不存在的"仪式"，是手工图化的必要成本，不是官僚主义。
+3. **终局不是互相复制**：TRT 式整图回放消不掉 host↔NPU 往返（双芯片是结构问题），
+   NPU 式常驻化+双 Die 落地后（推算 ~0.07 s）将反超 L20-TRT 0.103 s；两家物理下限同为 ~7 ms，
+   剩余路径各异——**GPU 靠 FP8，NPU 靠常驻化，胜负手在每瓦性能**。
 
 ## 疑问与批注
 
