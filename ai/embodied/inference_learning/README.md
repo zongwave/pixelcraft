@@ -51,7 +51,12 @@ Gr00tPolicy.get_action()
    （含全部命令、延迟/MSE 实测表、12 条坑清单、8 张配图）。其中 §5.4 是一次完整的
    **性能事故复盘**（40.28 → 1.71 s/步）。N1.6 / N1.7 部分同属"落地留存"，
    不改变 N1.5 教学基准。
-7. `tools/`——本章级可复跑工具：`l20_latency_probe.py`（单步延迟探针）、
+7. `14_SigLIP视觉塔NPU接入.md`——**视觉塔专项**：SigLIP 的调用链（`extract_feature` 唯一调用点、
+   每轮 infer 只跑一遍的 trace 铁证）、两个同名 `select_layer` 陷阱、T0 patch 注入点
+   （含"只剩 pyc 时如何 marshal 考古"方法）、per-op 融合算子接入清单（ffi/kernel/单轮 trace 计数
+   三栏对照）、整层融合 `siglip_layer_ffi_fused` 的硬约束与"已导出未启用"现状、n1.6 cross-image
+   拆档演进。含 2 张流程图（`tools/mk_fig_ch14_siglip_flow.py`）。
+8. `tools/`——本章级可复跑工具：`l20_latency_probe.py`（单步延迟探针）、
    `mk_fig_l20_e2e.py` / `mk_fig_n17.py`（第 13 章配图再生成）、
    `n17_arm_patch.py`（N1.7 退化 Conv3d 等价改写，自带 `--self-test`）、
    `redmine168_preproc_ab.py`（第 02 章 #168 预处理离线 A/B 归因）。

@@ -1,0 +1,77 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1300" height="860" viewBox="0 0 1300 860" font-family="Helvetica, Arial, 'Noto Sans CJK SC', 'WenQuanYi Zen Hei', sans-serif">
+<defs><marker id="arr" markerWidth="10" markerHeight="10" refX="7" refY="3" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L8,3 L0,6 Z" fill="#555"/></marker><marker id="arrRed" markerWidth="10" markerHeight="10" refX="7" refY="3" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L8,3 L0,6 Z" fill="#c0392b"/></marker><marker id="arrGreen" markerWidth="10" markerHeight="10" refX="7" refY="3" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L8,3 L0,6 Z" fill="#1e8449"/></marker><marker id="arrBlue" markerWidth="10" markerHeight="10" refX="7" refY="3" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L8,3 L0,6 Z" fill="#1f6feb"/></marker></defs>
+<rect x="0" y="0" width="1300" height="860" rx="8" fill="#fafafa" stroke="none" stroke-width="1.6"/>
+<text x="650.0" y="36" font-size="20.5" font-weight="bold" fill="#222" text-anchor="middle">图 14-2 · 一个 SiglipEncoderLayer（×27）：原生结构 | NPU per-op（当前主链） | 整层融合（已导出未启用）</text>
+<text x="650.0" y="60" font-size="12" font-weight="normal" fill="#666" text-anchor="middle">左：transformers 4.51.3 SiglipEncoderLayer（pre-norm）；中：npu/siglip.py wrapper 改调的 torch_evo kernel（计数=热轮 trace 单轮）；右：groot_ops@v0.2 fused_mha_out_ffi.cc</text>
+<text x="230.0" y="88" font-size="15" font-weight="bold" fill="#444" text-anchor="middle">① 原生（GPU / flash-attn2）</text>
+<text x="650.0" y="88" font-size="15" font-weight="bold" fill="#c0392b" text-anchor="middle">② NPU per-op（当前主链）</text>
+<text x="1090.0" y="88" font-size="15" font-weight="bold" fill="#1e8449" text-anchor="middle">③ 整层融合 siglip_layer_ffi_fused</text>
+<rect x="40" y="104" width="380" height="37" rx="8" fill="#fff" stroke="#aaa" stroke-width="1.6"/>
+<text x="230.0" y="130" font-size="12" font-weight="normal" fill="#444" text-anchor="middle">LayerNorm（eps=1e-6）</text>
+<rect x="460" y="104" width="380" height="54" rx="8" fill="#fdecea" stroke="#c0392b" stroke-width="1.6"/>
+<text x="650.0" y="130" font-size="12" font-weight="normal" fill="#444" text-anchor="middle">layernorm_run_die（ln1）</text>
+<text x="650.0" y="147" font-size="12" font-weight="normal" fill="#444" text-anchor="middle">共享核：全模型 ×68</text>
+<rect x="900" y="104" width="380" height="37" rx="8" fill="#eafaf1" stroke="#1e8449" stroke-width="1.6"/>
+<text x="1090.0" y="130" font-size="12" font-weight="normal" fill="#444" text-anchor="middle">LN1（ln1_has_res 可带残差）</text>
+<line x1="420" y1="131.0" x2="458" y2="131.0" stroke="#c0392b" stroke-width="1.8" marker-end="url(#arrRed)"/>
+<line x1="840" y1="131.0" x2="898" y2="131.0" stroke="#1e8449" stroke-width="1.8" marker-end="url(#arrGreen)"/>
+<rect x="40" y="170" width="380" height="71" rx="8" fill="#fff" stroke="#aaa" stroke-width="1.6"/>
+<text x="230.0" y="196" font-size="12" font-weight="normal" fill="#444" text-anchor="middle">MultiheadAttention</text>
+<text x="230.0" y="213" font-size="12" font-weight="normal" fill="#444" text-anchor="middle">q/k/v proj + softmax(QKᵀ/√d)V + out proj</text>
+<text x="230.0" y="230" font-size="12" font-weight="normal" fill="#444" text-anchor="middle">（16 头 × 72 = 1152）</text>
+<rect x="460" y="170" width="380" height="105" rx="8" fill="#fdecea" stroke="#c0392b" stroke-width="1.6"/>
+<text x="650.0" y="196" font-size="12" font-weight="normal" fill="#444" text-anchor="middle">gemm_bias_run_die ×4/层（q,k,v,o）</text>
+<text x="650.0" y="213" font-size="12" font-weight="normal" fill="#444" text-anchor="middle">共享核：全模型 ×129</text>
+<text x="650.0" y="230" font-size="12" font-weight="normal" fill="#444" text-anchor="middle">unified_mha_run_die_batch_emb</text>
+<text x="650.0" y="247" font-size="12" font-weight="normal" fill="#444" text-anchor="middle">  ×27 —— 与层数一一对应</text>
+<text x="650.0" y="264" font-size="12" font-weight="normal" fill="#444" text-anchor="middle">GROOT_NPU_QV_TRANSPOSE 选布局</text>
+<rect x="900" y="170" width="380" height="71" rx="8" fill="#eafaf1" stroke="#1e8449" stroke-width="1.6"/>
+<text x="1090.0" y="196" font-size="12" font-weight="normal" fill="#444" text-anchor="middle">QKV：wt_q/k/v+biases+eye</text>
+<text x="1090.0" y="213" font-size="12" font-weight="normal" fill="#444" text-anchor="middle">→ MHA（qv 布局内化，</text>
+<text x="1090.0" y="230" font-size="12" font-weight="normal" fill="#444" text-anchor="middle">   免 transpose）→ out_proj</text>
+<line x1="420" y1="222.5" x2="458" y2="222.5" stroke="#c0392b" stroke-width="1.8" marker-end="url(#arrRed)"/>
+<line x1="840" y1="222.5" x2="898" y2="222.5" stroke="#1e8449" stroke-width="1.8" marker-end="url(#arrGreen)"/>
+<rect x="40" y="287" width="380" height="37" rx="8" fill="#fff" stroke="#aaa" stroke-width="1.6"/>
+<text x="230.0" y="313" font-size="12" font-weight="normal" fill="#444" text-anchor="middle">+ 残差（x + attn_out）</text>
+<rect x="460" y="287" width="380" height="71" rx="8" fill="#fdecea" stroke="#c0392b" stroke-width="1.6"/>
+<text x="650.0" y="313" font-size="12" font-weight="normal" fill="#444" text-anchor="middle">residual_add_run_die</text>
+<text x="650.0" y="330" font-size="12" font-weight="normal" fill="#444" text-anchor="middle">全模型 ×25 &lt; 名义 2×27：</text>
+<text x="650.0" y="347" font-size="12" font-weight="normal" fill="#444" text-anchor="middle">部分残差已折进邻居 kernel</text>
+<rect x="900" y="287" width="380" height="54" rx="8" fill="#eafaf1" stroke="#1e8449" stroke-width="1.6"/>
+<text x="1090.0" y="313" font-size="12" font-weight="normal" fill="#444" text-anchor="middle">（融合在 ln1_has_res /</text>
+<text x="1090.0" y="330" font-size="12" font-weight="normal" fill="#444" text-anchor="middle">  mlp residual_enabled 内）</text>
+<line x1="420" y1="322.5" x2="458" y2="322.5" stroke="#c0392b" stroke-width="1.8" marker-end="url(#arrRed)"/>
+<line x1="840" y1="322.5" x2="898" y2="322.5" stroke="#1e8449" stroke-width="1.8" marker-end="url(#arrGreen)"/>
+<rect x="40" y="370" width="380" height="37" rx="8" fill="#fff" stroke="#aaa" stroke-width="1.6"/>
+<text x="230.0" y="396" font-size="12" font-weight="normal" fill="#444" text-anchor="middle">LayerNorm</text>
+<rect x="460" y="370" width="380" height="37" rx="8" fill="#fdecea" stroke="#c0392b" stroke-width="1.6"/>
+<text x="650.0" y="396" font-size="12" font-weight="normal" fill="#444" text-anchor="middle">layernorm_run_die（ln2）</text>
+<rect x="900" y="370" width="380" height="37" rx="8" fill="#eafaf1" stroke="#1e8449" stroke-width="1.6"/>
+<text x="1090.0" y="396" font-size="12" font-weight="normal" fill="#444" text-anchor="middle">LN2</text>
+<line x1="420" y1="388.5" x2="458" y2="388.5" stroke="#c0392b" stroke-width="1.8" marker-end="url(#arrRed)"/>
+<line x1="840" y1="388.5" x2="898" y2="388.5" stroke="#1e8449" stroke-width="1.8" marker-end="url(#arrGreen)"/>
+<rect x="40" y="419" width="380" height="54" rx="8" fill="#fff" stroke="#aaa" stroke-width="1.6"/>
+<text x="230.0" y="445" font-size="12" font-weight="normal" fill="#444" text-anchor="middle">MLP：fc1(1152→4304)</text>
+<text x="230.0" y="462" font-size="12" font-weight="normal" fill="#444" text-anchor="middle">→ gelu_pytorch_tanh → fc2(→1152)</text>
+<rect x="460" y="419" width="380" height="71" rx="8" fill="#fdecea" stroke="#c0392b" stroke-width="1.6"/>
+<text x="650.0" y="445" font-size="12" font-weight="normal" fill="#444" text-anchor="middle">mlp_gelu_run_die（独立核）</text>
+<text x="650.0" y="462" font-size="12" font-weight="normal" fill="#444" text-anchor="middle">ffi 有 residual_enabled 参数</text>
+<text x="650.0" y="479" font-size="12" font-weight="normal" fill="#444" text-anchor="middle">（可把下方残差折进来）</text>
+<rect x="900" y="419" width="380" height="37" rx="8" fill="#eafaf1" stroke="#1e8449" stroke-width="1.6"/>
+<text x="1090.0" y="445" font-size="12" font-weight="normal" fill="#444" text-anchor="middle">up(gelu_pytorch_tanh)/down</text>
+<line x1="420" y1="454.5" x2="458" y2="454.5" stroke="#c0392b" stroke-width="1.8" marker-end="url(#arrRed)"/>
+<line x1="840" y1="454.5" x2="898" y2="454.5" stroke="#1e8449" stroke-width="1.8" marker-end="url(#arrGreen)"/>
+<rect x="40" y="502" width="380" height="37" rx="8" fill="#fff" stroke="#aaa" stroke-width="1.6"/>
+<text x="230.0" y="528" font-size="12" font-weight="normal" fill="#444" text-anchor="middle">+ 残差（x + mlp_out）</text>
+<rect x="460" y="502" width="380" height="37" rx="8" fill="#fdecea" stroke="#c0392b" stroke-width="1.6"/>
+<text x="650.0" y="528" font-size="12" font-weight="normal" fill="#444" text-anchor="middle">residual_add_run_die</text>
+<rect x="900" y="502" width="380" height="37" rx="8" fill="#eafaf1" stroke="#1e8449" stroke-width="1.6"/>
+<text x="1090.0" y="528" font-size="12" font-weight="normal" fill="#444" text-anchor="middle">（层输出 = 下一层输入）</text>
+<line x1="420" y1="520.5" x2="458" y2="520.5" stroke="#c0392b" stroke-width="1.8" marker-end="url(#arrRed)"/>
+<line x1="840" y1="520.5" x2="898" y2="520.5" stroke="#1e8449" stroke-width="1.8" marker-end="url(#arrGreen)"/>
+<rect x="40" y="575" width="1220" height="118" rx="8" fill="#fff" stroke="#bbb" stroke-width="1.6"/>
+<text x="56" y="601" font-size="13.5" font-weight="bold" fill="#222" text-anchor="start">怎么读这张图：</text>
+<text x="56" y="623" font-size="12" font-weight="normal" fill="#222" text-anchor="start">· 左→中：npu/siglip.py 的三个 NPU_* 类 + encoder_layer_forward_wrapper 逐个结构换 kernel（per-op，发射次数≈结构数）；「共享核」的计数不能整除 27，因为 LM/DiT 也用同名 kernel（09 章纪律：名+@op 归组、trace 为准）。</text>
+<text x="56" y="645" font-size="12" font-weight="normal" fill="#222" text-anchor="start">· 中→右：siglip_attn_ffi_fused / siglip_layer_ffi_fused（fused_mha_out_ffi.cc :319/:472）把整层折成 1~2 次发射——N1.5 主链 trace 中出现 0 次；n1.6 线板测 3-cam 视觉塔 fused 0.082 s vs per-op 0.133 s（cos 0.999984，出处见 §6）。</text>
+<text x="56" y="667" font-size="12" font-weight="normal" fill="#222" text-anchor="start">· 塔尾另有 post_layernorm（vision_transformer_forward_wrapper 的 NPU 调用点）；mlp1(1152→2048) 不在 SigLIP 融合算子清单内。</text>
+</svg>
