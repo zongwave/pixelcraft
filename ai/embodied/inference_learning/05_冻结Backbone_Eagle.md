@@ -54,6 +54,9 @@ class EagleBackbone(nn.Module):
 
 ### 2.5 拆开黑盒第一步：视觉塔本体是 SigLIP（参数全表 · 权重实测）
 
+> 分工提示：本节只管**原生结构**（torch 视角）；SigLIP 的调用链全图、NPU 逐结构替换
+> 与整层融合清单在第 **14** 章。
+
 上一节的勘误框把封装层讲清了，但 `vision_model` 本身在本章一直是黑盒——"看懂世界"这件事
 其实全部发生在它里面。vendored `eagle2_hg_model/config.json`（`vision_config`）+ 官方 ckpt
 权重头对出的参数表（2026-09-29 实测，`model-00001` safetensors 头）：
