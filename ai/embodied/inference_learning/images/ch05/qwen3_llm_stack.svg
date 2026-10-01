@@ -49,9 +49,9 @@
 <rect x="940" y="314" width="125" height="45.0" rx="6" fill="#cfe3f7" stroke="#5b8db8" stroke-width="1.6"/>
 <text x="1002.5" y="332.5" font-size="11.5" font-weight="normal" fill="#1d3d57" text-anchor="middle">softmax</text>
 <text x="1002.5" y="349.5" font-size="11.5" font-weight="normal" fill="#1d3d57" text-anchor="middle">(QKᵀ/√128)·V</text>
-<rect x="855" y="258" width="200" height="45.0" rx="6" fill="#fdecea" stroke="#c0392b" stroke-width="1.6"/>
-<text x="955.0" y="276.5" font-size="11.5" font-weight="bold" fill="#c0392b" text-anchor="middle">没有 causal mask——双向</text>
-<text x="955.0" y="293.5" font-size="11.5" font-weight="bold" fill="#c0392b" text-anchor="middle">一次 prefill：无 KV cache</text>
+<rect x="868" y="258" width="260" height="44.0" rx="6" fill="#fdecea" stroke="#c0392b" stroke-width="1.6"/>
+<text x="998.0" y="276.25" font-size="11" font-weight="bold" fill="#c0392b" text-anchor="middle">causal mask：仍在——核内置 causal GQA</text>
+<text x="998.0" y="292.75" font-size="11" font-weight="bold" fill="#c0392b" text-anchor="middle">无 KV cache：每轮 infer 一次 prefill</text>
 <polyline points="1000,294 1000,312" fill="none" stroke="#c0392b" stroke-width="1.7" stroke-dasharray="5 4" marker-end="url(#arr)"/>
 <polyline points="580,415 1090,415 1090,427" fill="none" stroke="#999" stroke-width="1.7"/>
 <polyline points="1065,350 1065,393 1090,403" fill="none" stroke="#999" stroke-width="1.7"/>

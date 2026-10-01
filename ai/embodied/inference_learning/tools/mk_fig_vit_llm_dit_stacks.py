@@ -160,7 +160,7 @@ def fig_llm():
     s.circ(905, ym, "×")
     s.path([(917, ym), (938, ym)])
     s.box(940, ym - 18, 125, ["softmax", "(QKᵀ/√128)·V"], where="sm", lsize=11.5)
-    s.box(855, C + 8, 200, ["没有 causal mask——双向", "一次 prefill：无 KV cache"], red=True, where="mask", lsize=11.5)
+    s.box(868, C + 8, 260, ["causal mask：仍在——核内置 causal GQA", "无 KV cache：每轮 infer 一次 prefill"], red=True, where="mask", lsize=11)
     s.path([(1000, C + 44), (1000, ym - 20)], color=RED, dash="5 4")
     # V 绕下 → ⊗V
     ymv = C + 165

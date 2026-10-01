@@ -189,12 +189,46 @@ n1.5-release 与 main 该目录零 diff）：
 §4.5 记清了 token 账，但"进了 Qwen3 之后每一步到底算什么"还没有一张逐运算图。
 图 5-3 用与 01 章 llama_decoder.png 完全相同的画法补上这块拼图：**主干竖线 =
 hidden_states 逐级下行，左侧绕行线 = 残差（⊕），中间把 qkv 三投影、QK 打分
-（⊗→softmax→⊗V）、o_proj、SwiGLU 的 gate/up/SiLU/×/down 全部展开**。三处与
-Llama 骨架不同的地方用红框钉死：**没有 causal mask**（图文序列一次 prefill，
-双向读）、**没有 KV cache**（每轮 infer 整塔只跑 1 遍）、**没有 lm_head**
-（第 12 层交完 `hidden_states` 就收工——是截断的特征提取器，不是生成器）。
-另注意 qk-norm（头级 RMSNorm）是 Qwen3 相对 Llama 多出来的一格，NPU 侧它和
-qkv 投影、RoPE 一起被 `gemm_norm_rope_run_die_single` 收进同一个核。
+（⊗→softmax→⊗V）、o_proj、SwiGLU 的 gate/up/SiLU/×/down 全部展开**。
+两处最容易想错的地方用红框钉死。其一，**causal mask 仍然在**：这 12 层是货真价实的
+causal LM（`Qwen3ForCausalLM`，NPU 核 `qwen3_attention_ffi.cc:306` 直接写死
+causal GQA），只是**不需要 padding mask**——单样本定长 296，没有补位（mask 的
+两种用途见 §4.7）。其二，**没有 KV cache**：KV cache 是给"逐 token 自回归生成"
+省重复计算的，而这里只有一次 prefill、不生成任何 token——每轮 infer 整塔只跑 1 遍。
+再加深一个与 Llama 骨架不同的地方：**没有 lm_head**（第 12 层交完 `hidden_states`
+就收工——是截断的特征提取器，不是生成器）。另注意 qk-norm（头级 RMSNorm）是
+Qwen3 相对 Llama 多出来的一格，NPU 侧它和 qkv 投影、RoPE 一起被
+`gemm_norm_rope_run_die_single` 收进同一个核。
+
+### 4.7 为什么 backbone 里两个塔都不用 KV cache（顺带把 mask 讲透）
+
+**mask 有两种，别混为一谈**：
+
+| mask 种类 | 作用 | ViT（SigLIP） | LLM（Qwen3） | DiT |
+|---|---|---|---|---|
+| causal mask（结构性，来自"从左往右读"的归纳偏置） | 遮住未来 token | **不需要**——256 个 patch 是无序的空间瓦片，天然双向 | **必需**——权重是按 causal LM 训的，去掉 causal 数值就错 | **不需要**——16 步动作整体去噪，不是逐 token 生成（`fused_mha` 参数 `causal=0`） |
+| padding mask（批对齐用，遮补位 token） | 变长序列拼 batch | 不需要——每张图恒 256 token，无补位 | 不需要——推理单样本定长 296，无补位 | 不需要——恒 49 token |
+
+所以"ViT 无 mask"和"LLM 无 mask"是两回事：ViT 是**两种都没有**，Qwen3 是
+**causal 仍在、只是没有 padding mask**。NPU 核的接口形状印证了这一点：
+视觉/动作侧核参数里没有 mask 指针，`qwen3_attention` 则把 causal 直接编译进核。
+
+**KV cache 则只回答一个问题**："自回归 decode 的第 t 步，前 t−1 个 token 的
+K/V 能不能不重算？" 它的存在前提是**同一段前缀会被逐步复用**。backbone 里
+两个塔都没有这个前提：
+
+- **ViT**：一次 `get_action` 只前向 1 次（09 章 trace：`conv2d_patch_embed ×1`），
+  256 token 一把过，没有"下一步"可言；
+- **Qwen3**：同样是单次 prefill（`qwen3_attention ×12`，12 层各 1 发），取完
+  `hidden_states[12]` 就完事，不吐 token。
+
+真正"循环 4 次"的是 DiT，而它的复用根本不需要 KV cache 机制——**复用的是
+backbone 的输出本身**：`backbone_features` 在 4 步之间一字不改，偶数层 cross 的
+K/V 因此可以整段缓存（06 §6.7 与图 6-1 红框：8/16 层约 14 MiB）。换句话说，
+LLM 用 KV cache 缓存"自己历史的 K/V"，gr00t 用冻结 backbone 缓存"整个前缀的
+输出"——后者是前者的极致特例：前缀 100% 恒定，于是整个前缀一次性算完供 4 步。
+
+
 
 ![Qwen3 语言塔 12 层逐运算展开](images/ch05/qwen3_llm_stack.svg)
 *图 5-3：自绘（`tools/mk_fig_vit_llm_dit_stacks.py`）——单层逐运算 + 出塔 tap；底部灰框是 trace 单轮核数对照（09 §10.6）。与 06 图 6-1、14 图 14-3 同一套读图语法，可三图并排对照。*
