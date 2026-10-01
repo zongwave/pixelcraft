@@ -1,0 +1,178 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1500" height="1900" viewBox="0 0 1500 1900" font-family="Helvetica, Arial, 'Noto Sans CJK SC', 'WenQuanYi Zen Hei', sans-serif">
+<defs><marker id="arr" markerWidth="10" markerHeight="10" refX="7" refY="3" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L8,3 L0,6 Z" fill="#777"/></marker><marker id="arrRed" markerWidth="10" markerHeight="10" refX="7" refY="3" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L8,3 L0,6 Z" fill="#c0392b"/></marker></defs>
+<rect x="0" y="0" width="1500" height="1900" rx="0" fill="#ffffff" stroke="none" stroke-width="1.6"/>
+<text x="750.0" y="34" font-size="22" font-weight="bold" fill="#222" text-anchor="middle">GR00T-N1.5 前向框架图：一个 VLM（ViT 嵌在其内）+ 一个 DiT</text>
+<text x="750.0" y="58" font-size="12" font-weight="normal" fill="#777" text-anchor="middle">画法对标 llama_decoder.png：竖排数据流 + 虚线容器=类/模块边界 + 蓝盒=算子/子模块 + 红=关键机制。数字 n1.5-release 实测（04 §1.1 / 05 §2.5 / 06 / 14 章）</text>
+<rect x="180" y="76" width="240" height="48.0" rx="6" fill="#fff" stroke="#999" stroke-width="1.6"/>
+<text x="300.0" y="95.5" font-size="12.5" font-weight="normal" fill="#1d3d57" text-anchor="middle">obs 输入</text>
+<text x="300.0" y="113.5" font-size="12.5" font-weight="normal" fill="#1d3d57" text-anchor="middle">3 cam 224² + state + 语言</text>
+<polyline points="300,126.0 300,152" fill="none" stroke="#777" stroke-width="1.7" marker-end="url(#arr)"/>
+<text x="308" y="143.0" font-size="11.5" font-weight="normal" fill="#666" text-anchor="start">inputs</text>
+<rect x="20" y="152" width="560" height="48.0" rx="6" fill="#f2f2f2" stroke="#999" stroke-width="1.6"/>
+<text x="300.0" y="171.5" font-size="12.5" font-weight="normal" fill="#1d3d57" text-anchor="middle">collate_fn：图像 resize/normalize；tokenize；key 加 eagle_ 前缀</text>
+<text x="300.0" y="189.5" font-size="12.5" font-weight="normal" fill="#1d3d57" text-anchor="middle">(gr00t/model/transforms.py:55-83)</text>
+<rect x="60" y="228" width="1380" height="1406" rx="18" fill="none" stroke="#1f6feb" stroke-width="2" stroke-dasharray="7 5"/>
+<text x="750.0" y="250" font-size="15" font-weight="bold" fill="#1f6feb" text-anchor="middle">GR00T_N1_5  (gr00t_n1.py) —— 双脑容器</text>
+<rect x="90" y="262" width="1320" height="842" rx="16" fill="none" stroke="#c0392b" stroke-width="1.8" stroke-dasharray="6 5"/>
+<text x="700" y="286" font-size="14.5" font-weight="bold" fill="#c0392b" text-anchor="start">脑1 · EagleBackbone = Eagle-2.5-VLM（整体冻结；每轮 infer 只跑 1 遍，产出即 backbone_features）</text>
+<rect x="120" y="302" width="640" height="356" rx="12" fill="none" stroke="#b9770e" stroke-width="1.8" stroke-dasharray="5 4"/>
+<text x="440" y="322" font-size="13" font-weight="bold" fill="#b9770e" text-anchor="middle">SiglipVisionModel（“ViT”·实现住在 transformers 4.51.3，14 章）</text>
+<rect x="170" y="334" width="260" height="30" rx="6" fill="#cfe3f7" stroke="#5b8db8" stroke-width="1.6"/>
+<text x="300.0" y="353.5" font-size="12.5" font-weight="normal" fill="#1d3d57" text-anchor="middle">pixel_values [B,3,224,224]</text>
+<polyline points="300,366 300,388" fill="none" stroke="#777" stroke-width="1.7" marker-end="url(#arr)"/>
+<rect x="170" y="388" width="260" height="48.0" rx="6" fill="#cfe3f7" stroke="#5b8db8" stroke-width="1.6"/>
+<text x="300.0" y="407.5" font-size="12.5" font-weight="normal" fill="#1d3d57" text-anchor="middle">Conv2d 3→1152, k14×14 s14</text>
+<text x="300.0" y="425.5" font-size="12.5" font-weight="normal" fill="#1d3d57" text-anchor="middle">→ 16×16 = 256 patch</text>
+<polyline points="300,438.0 300,452" fill="none" stroke="#777" stroke-width="1.7" marker-end="url(#arr)"/>
+<rect x="170" y="452" width="260" height="30" rx="6" fill="#cfe3f7" stroke="#5b8db8" stroke-width="1.6"/>
+<text x="300.0" y="471.5" font-size="12.5" font-weight="normal" fill="#1d3d57" text-anchor="middle">+ 可学习 PE [256,1152]（无 CLS）</text>
+<polyline points="300,484 300,512" fill="none" stroke="#777" stroke-width="1.7" marker-end="url(#arr)"/>
+<rect x="170" y="512" width="260" height="31.5" rx="6" fill="#cfe3f7" stroke="#5b8db8" stroke-width="1.6"/>
+<text x="300.0" y="532.25" font-size="14" font-weight="normal" fill="#1d3d57" text-anchor="middle">27 × SiglipEncoderLayer</text>
+<polyline points="300,545.5 300,572" fill="none" stroke="#777" stroke-width="1.7" marker-end="url(#arr)"/>
+<rect x="170" y="572" width="260" height="30" rx="6" fill="#cfe3f7" stroke="#5b8db8" stroke-width="1.6"/>
+<text x="300.0" y="591.5" font-size="12.5" font-weight="normal" fill="#1d3d57" text-anchor="middle">post-LN → [B, n_img, 1152]</text>
+<polyline points="432,534 472,534" fill="none" stroke="#999" stroke-width="1.7" stroke-dasharray="4 3" marker-end="url(#arr)"/>
+<rect x="472" y="342" width="268" height="296" rx="10" fill="none" stroke="#999" stroke-width="1.6" stroke-dasharray="4 3"/>
+<text x="606" y="360" font-size="12" font-weight="bold" fill="#555" text-anchor="middle">1 层展开（pre-norm）</text>
+<rect x="496" y="370" width="220" height="30" rx="6" fill="#cfe3f7" stroke="#5b8db8" stroke-width="1.6"/>
+<text x="606.0" y="389.5" font-size="12" font-weight="normal" fill="#1d3d57" text-anchor="middle">LayerNorm</text>
+<polyline points="606,402 606,414" fill="none" stroke="#777" stroke-width="1.7" marker-end="url(#arr)"/>
+<rect x="496" y="414" width="220" height="47.0" rx="6" fill="#cfe3f7" stroke="#5b8db8" stroke-width="1.6"/>
+<text x="606.0" y="433.25" font-size="12" font-weight="normal" fill="#1d3d57" text-anchor="middle">MHA（flash-attn2）</text>
+<text x="606.0" y="450.75" font-size="12" font-weight="normal" fill="#1d3d57" text-anchor="middle">q/k/v·o proj</text>
+<circle cx="606" cy="478" r="13" fill="#fff" stroke="#555" stroke-width="1.6"/>
+<text x="606" y="482.5" font-size="13" font-weight="bold" fill="#333" text-anchor="middle">+</text>
+<polyline points="496,434 466,434 466,478 591,478" fill="none" stroke="#999" stroke-width="1.7" marker-end="url(#arr)"/>
+<polyline points="606,446 606,463" fill="none" stroke="#777" stroke-width="1.7" marker-end="url(#arr)"/>
+<polyline points="606,493 606,512" fill="none" stroke="#777" stroke-width="1.7" marker-end="url(#arr)"/>
+<rect x="496" y="512" width="220" height="30" rx="6" fill="#cfe3f7" stroke="#5b8db8" stroke-width="1.6"/>
+<text x="606.0" y="531.5" font-size="12" font-weight="normal" fill="#1d3d57" text-anchor="middle">LayerNorm</text>
+<polyline points="606,544 606,554" fill="none" stroke="#777" stroke-width="1.7" marker-end="url(#arr)"/>
+<rect x="496" y="554" width="220" height="47.0" rx="6" fill="#cfe3f7" stroke="#5b8db8" stroke-width="1.6"/>
+<text x="606.0" y="573.25" font-size="12" font-weight="normal" fill="#1d3d57" text-anchor="middle">MLP fc1 1152→4304</text>
+<text x="606.0" y="590.75" font-size="12" font-weight="normal" fill="#1d3d57" text-anchor="middle">gelu_tanh · fc2 →1152</text>
+<circle cx="606" cy="618" r="13" fill="#fff" stroke="#555" stroke-width="1.6"/>
+<text x="606" y="622.5" font-size="13" font-weight="bold" fill="#333" text-anchor="middle">+</text>
+<polyline points="606,596 606,603" fill="none" stroke="#999" stroke-width="1.7" marker-end="url(#arr)"/>
+<polyline points="496,574 466,574 466,618 591,618" fill="none" stroke="#999" stroke-width="1.7" marker-end="url(#arr)"/>
+<polyline points="300,604 300,680" fill="none" stroke="#777" stroke-width="1.7" marker-end="url(#arr)"/>
+<text x="308" y="646.0" font-size="11.5" font-weight="normal" fill="#666" text-anchor="start">extract_feature 唯一调用点（:311）</text>
+<rect x="170" y="680" width="260" height="48.0" rx="6" fill="#cfe3f7" stroke="#5b8db8" stroke-width="1.6"/>
+<text x="300.0" y="699.5" font-size="12.5" font-weight="normal" fill="#1d3d57" text-anchor="middle">mlp1（桥）1152 → 2048</text>
+<text x="300.0" y="717.5" font-size="12.5" font-weight="normal" fill="#1d3d57" text-anchor="middle">extract_feature :334</text>
+<rect x="770" y="334" width="250" height="48.0" rx="6" fill="#f2f2f2" stroke="#999" stroke-width="1.6"/>
+<text x="895.0" y="353.5" font-size="12.5" font-weight="normal" fill="#1d3d57" text-anchor="middle">input_ids（含 image_token</text>
+<text x="895.0" y="371.5" font-size="12.5" font-weight="normal" fill="#1d3d57" text-anchor="middle">151669 占位 ×256×n_cam）</text>
+<polyline points="895,384.0 895,424" fill="none" stroke="#777" stroke-width="1.7" marker-end="url(#arr)"/>
+<rect x="770" y="424" width="250" height="30" rx="6" fill="#f2f2f2" stroke="#999" stroke-width="1.6"/>
+<text x="895.0" y="443.5" font-size="12.5" font-weight="normal" fill="#1d3d57" text-anchor="middle">LM embedding → [B,296,2048]</text>
+<polyline points="895,462 895,756 440,756" fill="none" stroke="#999" stroke-width="1.7" marker-end="url(#arr)"/>
+<rect x="160" y="730" width="280" height="48.0" rx="6" fill="#fdecea" stroke="#c0392b" stroke-width="1.6"/>
+<text x="300.0" y="749.5" font-size="12.5" font-weight="bold" fill="#c0392b" text-anchor="middle">原位替换（红框机制）</text>
+<text x="300.0" y="767.5" font-size="12.5" font-weight="bold" fill="#c0392b" text-anchor="middle">img_embeds → 151669 位置 (:247)</text>
+<polyline points="300,730.0 300,728" fill="none" stroke="#777" stroke-width="1.7" marker-end="url(#arr)"/>
+<text x="300" y="796" font-size="12" font-weight="normal" fill="#666" text-anchor="middle">inputs_embeds [B,296,2048] 图文混合（demo 296 = 256+26+14）</text>
+<polyline points="300,802 300,830" fill="none" stroke="#777" stroke-width="1.7" marker-end="url(#arr)"/>
+<rect x="120" y="830" width="640" height="190" rx="12" fill="none" stroke="#7d3c98" stroke-width="1.8" stroke-dasharray="5 4"/>
+<text x="440" y="850" font-size="13" font-weight="bold" fill="#7d3c98" text-anchor="middle">Qwen3 语言塔（“LLM”·加载时 layers.pop 裁到前 12 层，:56-58）</text>
+<rect x="160" y="866" width="280" height="31.5" rx="6" fill="#cfe3f7" stroke="#5b8db8" stroke-width="1.6"/>
+<text x="300.0" y="886.25" font-size="14" font-weight="normal" fill="#1d3d57" text-anchor="middle">12 × Qwen3DecoderLayer</text>
+<text x="300" y="930" font-size="12" font-weight="normal" fill="#c0392b" text-anchor="middle">※ 无 lm_head、不生成 token——</text>
+<text x="300" y="948" font-size="12" font-weight="normal" fill="#c0392b" text-anchor="middle">只 tap hidden_states[12] 当条件特征</text>
+<text x="300" y="972" font-size="11.5" font-weight="normal" fill="#666" text-anchor="middle">（与视觉塔 config 里那个 select_layer 同名不同物！05/14 章）</text>
+<polyline points="442,890 770,890" fill="none" stroke="#999" stroke-width="1.7" stroke-dasharray="4 3" marker-end="url(#arr)"/>
+<rect x="770" y="856" width="610" height="150" rx="10" fill="none" stroke="#999" stroke-width="1.6" stroke-dasharray="4 3"/>
+<text x="1075" y="876" font-size="12" font-weight="bold" fill="#555" text-anchor="middle">1 层展开（pre-norm, RoPE, GQA）</text>
+<rect x="786" y="896" width="84" height="30" rx="6" fill="#cfe3f7" stroke="#5b8db8" stroke-width="1.6"/>
+<text x="828.0" y="915.5" font-size="11.5" font-weight="normal" fill="#1d3d57" text-anchor="middle">RMSNorm</text>
+<rect x="886" y="896" width="92" height="30" rx="6" fill="#cfe3f7" stroke="#5b8db8" stroke-width="1.6"/>
+<text x="932.0" y="915.5" font-size="11.5" font-weight="normal" fill="#1d3d57" text-anchor="middle">Self-Attn</text>
+<circle cx="1007" cy="912" r="13" fill="#fff" stroke="#555" stroke-width="1.6"/>
+<text x="1007" y="916.5" font-size="13" font-weight="bold" fill="#333" text-anchor="middle">+</text>
+<rect x="1036" y="896" width="84" height="30" rx="6" fill="#cfe3f7" stroke="#5b8db8" stroke-width="1.6"/>
+<text x="1078.0" y="915.5" font-size="11.5" font-weight="normal" fill="#1d3d57" text-anchor="middle">RMSNorm</text>
+<rect x="1136" y="896" width="106" height="30" rx="6" fill="#cfe3f7" stroke="#5b8db8" stroke-width="1.6"/>
+<text x="1189.0" y="915.5" font-size="11.5" font-weight="normal" fill="#1d3d57" text-anchor="middle">SwiGLU MLP</text>
+<circle cx="1271" cy="912" r="13" fill="#fff" stroke="#555" stroke-width="1.6"/>
+<text x="1271" y="916.5" font-size="13" font-weight="bold" fill="#333" text-anchor="middle">+</text>
+<polyline points="1271,912 1271,950" fill="none" stroke="#999" stroke-width="1.7" marker-end="url(#arr)"/>
+<text x="1075" y="972" font-size="11" font-weight="normal" fill="#666" text-anchor="middle">trace: qwen3_attention_run_die ×12 + mlp_swiglu ×12（09 章）</text>
+<polyline points="300,1028 300,1052" fill="none" stroke="#777" stroke-width="1.7" marker-end="url(#arr)"/>
+<rect x="170" y="1052" width="260" height="48.0" rx="6" fill="#cfe3f7" stroke="#5b8db8" stroke-width="1.6"/>
+<text x="300.0" y="1071.5" font-size="12.5" font-weight="normal" fill="#1d3d57" text-anchor="middle">eagle_linear（adapter）</text>
+<text x="300.0" y="1089.5" font-size="12.5" font-weight="normal" fill="#1d3d57" text-anchor="middle">→ backbone_features [B,296,2048]</text>
+<text x="700" y="1070" font-size="13" font-weight="bold" fill="#c0392b" text-anchor="start">= 脑2 全部 cross-attn 的 K/V：4 步去噪固定不变 → 可缓存（06 §6.7）</text>
+<polyline points="700,1082 1235,1082" fill="none" stroke="#c0392b" stroke-width="1.7" stroke-dasharray="7 4"/>
+<rect x="90" y="1124" width="1320" height="486" rx="16" fill="none" stroke="#1e8449" stroke-width="1.8" stroke-dasharray="6 5"/>
+<text x="700" y="1148" font-size="14.5" font-weight="bold" fill="#1e8449" text-anchor="start">脑2 · FlowmatchingActionHead（DiT·可训练；“K iterations”去噪循环在这里）</text>
+<rect x="170" y="1166" width="260" height="30" rx="6" fill="#cfe3f7" stroke="#5b8db8" stroke-width="1.6"/>
+<text x="300.0" y="1185.5" font-size="12.5" font-weight="normal" fill="#1d3d57" text-anchor="middle">noise a_t [B,16,32]（randn）</text>
+<polyline points="300,1198 300,1226" fill="none" stroke="#777" stroke-width="1.7" marker-end="url(#arr)"/>
+<rect x="170" y="1226" width="260" height="30" rx="6" fill="#cfe3f7" stroke="#5b8db8" stroke-width="1.6"/>
+<text x="300.0" y="1245.5" font-size="12.5" font-weight="normal" fill="#1d3d57" text-anchor="middle">in_proj 32→1536（+state token）</text>
+<rect x="560" y="1226" width="200" height="30" rx="6" fill="#f2f2f2" stroke="#999" stroke-width="1.6"/>
+<text x="660.0" y="1245.5" font-size="12.5" font-weight="normal" fill="#1d3d57" text-anchor="middle">state 32 → encoder → 1536</text>
+<polyline points="558,1246 434,1246" fill="none" stroke="#999" stroke-width="1.7" marker-end="url(#arr)"/>
+<text x="660" y="1278" font-size="11" font-weight="normal" fill="#666" text-anchor="middle">horizon=16, action_dim=32</text>
+<polyline points="300,1258 300,1310" fill="none" stroke="#777" stroke-width="1.7" marker-end="url(#arr)"/>
+<rect x="560" y="1306" width="150" height="48.0" rx="6" fill="#f2f2f2" stroke="#999" stroke-width="1.6"/>
+<text x="635.0" y="1325.5" font-size="12.5" font-weight="normal" fill="#1d3d57" text-anchor="middle">t → sinusoidal</text>
+<text x="635.0" y="1343.5" font-size="12.5" font-weight="normal" fill="#1d3d57" text-anchor="middle">→ AdaLN 调制</text>
+<polyline points="558,1334 434,1334" fill="none" stroke="#999" stroke-width="1.7" marker-end="url(#arr)"/>
+<rect x="170" y="1310" width="260" height="51.0" rx="6" fill="#cfe3f7" stroke="#5b8db8" stroke-width="1.6"/>
+<text x="300.0" y="1330.25" font-size="14" font-weight="normal" fill="#1d3d57" text-anchor="middle">16 × DiT Block</text>
+<text x="300.0" y="1349.75" font-size="14" font-weight="normal" fill="#1d3d57" text-anchor="middle">hidden 1536 · 偶数层 cross</text>
+<polyline points="432,1374 500,1374 500,1444 768,1444" fill="none" stroke="#999" stroke-width="1.7" stroke-dasharray="4 3" marker-end="url(#arr)"/>
+<rect x="770" y="1180" width="620" height="316" rx="10" fill="none" stroke="#999" stroke-width="1.6" stroke-dasharray="4 3"/>
+<text x="1080" y="1200" font-size="12" font-weight="bold" fill="#555" text-anchor="middle">1 层 DiT Block 展开（06 §6.8：三种注意力各归其位）</text>
+<rect x="790" y="1222" width="76" height="30" rx="6" fill="#cfe3f7" stroke="#5b8db8" stroke-width="1.6"/>
+<text x="828.0" y="1241.5" font-size="11.5" font-weight="normal" fill="#1d3d57" text-anchor="middle">AdaLN</text>
+<rect x="882" y="1222" width="92" height="30" rx="6" fill="#cfe3f7" stroke="#5b8db8" stroke-width="1.6"/>
+<text x="928.0" y="1241.5" font-size="11.5" font-weight="normal" fill="#1d3d57" text-anchor="middle">Self-Attn</text>
+<circle cx="1003" cy="1240" r="13" fill="#fff" stroke="#555" stroke-width="1.6"/>
+<text x="1003" y="1244.5" font-size="13" font-weight="bold" fill="#333" text-anchor="middle">+</text>
+<rect x="1032" y="1222" width="96" height="30" rx="6" fill="#cfe3f7" stroke="#5b8db8" stroke-width="1.6"/>
+<text x="1080.0" y="1241.5" font-size="11.5" font-weight="normal" fill="#1d3d57" text-anchor="middle">Cross-Attn</text>
+<circle cx="1157" cy="1240" r="13" fill="#fff" stroke="#555" stroke-width="1.6"/>
+<text x="1157" y="1244.5" font-size="13" font-weight="bold" fill="#333" text-anchor="middle">+</text>
+<polyline points="1157,1255 1157,1280 875,1280 875,1298" fill="none" stroke="#999" stroke-width="1.7" marker-end="url(#arr)"/>
+<polyline points="1113,1335 1113,1358" fill="none" stroke="#999" stroke-width="1.7" marker-end="url(#arr)"/>
+<rect x="830" y="1300" width="90" height="30" rx="6" fill="#cfe3f7" stroke="#5b8db8" stroke-width="1.6"/>
+<text x="875.0" y="1319.5" font-size="11.5" font-weight="normal" fill="#1d3d57" text-anchor="middle">AdaLN</text>
+<polyline points="922,1320 940,1320" fill="none" stroke="#999" stroke-width="1.7" marker-end="url(#arr)"/>
+<rect x="942" y="1300" width="130" height="30" rx="6" fill="#cfe3f7" stroke="#5b8db8" stroke-width="1.6"/>
+<text x="1007.0" y="1319.5" font-size="11.5" font-weight="normal" fill="#1d3d57" text-anchor="middle">FF GEGLU ×4</text>
+<circle cx="1100" cy="1320" r="13" fill="#fff" stroke="#555" stroke-width="1.6"/>
+<text x="1100" y="1324.5" font-size="13" font-weight="bold" fill="#333" text-anchor="middle">+</text>
+<polyline points="1074,1320 1085,1320" fill="none" stroke="#999" stroke-width="1.7" marker-end="url(#arr)"/>
+<rect x="830" y="1384" width="200" height="66.0" rx="6" fill="#fdecea" stroke="#c0392b" stroke-width="1.6"/>
+<text x="930.0" y="1403.5" font-size="12.5" font-weight="bold" fill="#c0392b" text-anchor="middle">cross K/V = 脑1 特征</text>
+<text x="930.0" y="1421.5" font-size="12.5" font-weight="bold" fill="#c0392b" text-anchor="middle">4 步不变 → 只缓存 K/V</text>
+<text x="930.0" y="1439.5" font-size="12.5" font-weight="bold" fill="#c0392b" text-anchor="middle">（8/16 层，约 14 MiB）</text>
+<polyline points="1235,1086 1235,1410 1034,1410" fill="none" stroke="#c0392b" stroke-width="1.7" stroke-dasharray="7 4" marker-end="url(#arrRed)"/>
+<text x="1080" y="1478" font-size="11.5" font-weight="normal" fill="#666" text-anchor="middle">self：动作 16 token 互相看；cross：查图文背景（vl_embs 2048→1536，32 头×48）</text>
+<polyline points="300,1363.0 300,1492" fill="none" stroke="#777" stroke-width="1.7" marker-end="url(#arr)"/>
+<rect x="170" y="1492" width="260" height="30" rx="6" fill="#cfe3f7" stroke="#5b8db8" stroke-width="1.6"/>
+<text x="300.0" y="1511.5" font-size="12.5" font-weight="normal" fill="#1d3d57" text-anchor="middle">out_proj 1536→32（速度场 v）</text>
+<polyline points="168,1512 106,1512 106,1186 166,1186" fill="none" stroke="#c0392b" stroke-width="1.7" stroke-dasharray="7 4" marker-end="url(#arrRed)"/>
+<text x="112" y="1436" font-size="13.5" font-weight="bold" fill="#c0392b" text-anchor="start">×4 步</text>
+<text x="112" y="1453" font-size="10.5" font-weight="normal" fill="#c0392b" text-anchor="start">复用 cross K/V</text>
+<polyline points="300,1524 300,1552" fill="none" stroke="#777" stroke-width="1.7" marker-end="url(#arr)"/>
+<rect x="170" y="1552" width="260" height="31.5" rx="6" fill="#cfe3f7" stroke="#5b8db8" stroke-width="1.6"/>
+<text x="300.0" y="1572.25" font-size="14" font-weight="normal" fill="#1d3d57" text-anchor="middle">action_pred [B,16,32]</text>
+<polyline points="300,1585.5 300,1652" fill="none" stroke="#777" stroke-width="1.7" marker-end="url(#arr)"/>
+<rect x="150" y="1652" width="300" height="30" rx="6" fill="#f2f2f2" stroke="#999" stroke-width="1.6"/>
+<text x="300.0" y="1671.5" font-size="12.5" font-weight="normal" fill="#1d3d57" text-anchor="middle">反归一化（transforms 逆变换，02 章）</text>
+<polyline points="300,1684 300,1724" fill="none" stroke="#777" stroke-width="1.7" marker-end="url(#arr)"/>
+<rect x="180" y="1724" width="240" height="30" rx="6" fill="#fff" stroke="#999" stroke-width="1.6"/>
+<text x="300.0" y="1743.5" font-size="12.5" font-weight="normal" fill="#1d3d57" text-anchor="middle">action → 机器人</text>
+<rect x="90" y="1792" width="1320" height="68" rx="6" fill="#fafafa" stroke="#ddd" stroke-width="1.6"/>
+<rect x="110" y="1804" width="120" height="30" rx="6" fill="#cfe3f7" stroke="#5b8db8" stroke-width="1.6"/>
+<text x="170.0" y="1823.5" font-size="11.5" font-weight="normal" fill="#1d3d57" text-anchor="middle">模块/算子</text>
+<rect x="260" y="1804" width="120" height="30" rx="6" fill="#fdecea" stroke="#c0392b" stroke-width="1.6"/>
+<text x="320.0" y="1823.5" font-size="11.5" font-weight="bold" fill="#c0392b" text-anchor="middle">关键机制</text>
+<rect x="420" y="1802" width="26" height="26" rx="6" fill="none" stroke="#999" stroke-width="1.6" stroke-dasharray="4 3"/>
+<text x="456" y="1821" font-size="12" font-weight="normal" fill="#555" text-anchor="start">虚线容器 = 类/模块边界（对标 LlamaModel/LlamaAttention）</text>
+<text x="456" y="1846" font-size="12" font-weight="normal" fill="#555" text-anchor="start">冻结 = 权重不更新（N1.5 基座 VLM 全冻，12 章）；可训练 = DiT + adapter；×1/×4 = 每轮 infer 执行次数（trace 可验证，14 章 §3.2）</text>
+</svg>
