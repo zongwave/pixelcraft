@@ -184,6 +184,21 @@ n1.5-release 与 main 该目录零 diff）：
    这正是 06 §6.7"观测=prefill、去噪循环=decode"同构的出处，也是 09 §10.1"前缀恒定 ⇒
    条件量可预计算常驻"的算术依据（1 图 1 步去噪的负载里，这 296-token 前缀就是最肥的一段）。
 
+### 4.6 语言塔本体的骨架：12 × Qwen3DecoderLayer（图 5-3）
+
+§4.5 记清了 token 账，但"进了 Qwen3 之后每一步到底算什么"还没有一张逐运算图。
+图 5-3 用与 01 章 llama_decoder.png 完全相同的画法补上这块拼图：**主干竖线 =
+hidden_states 逐级下行，左侧绕行线 = 残差（⊕），中间把 qkv 三投影、QK 打分
+（⊗→softmax→⊗V）、o_proj、SwiGLU 的 gate/up/SiLU/×/down 全部展开**。三处与
+Llama 骨架不同的地方用红框钉死：**没有 causal mask**（图文序列一次 prefill，
+双向读）、**没有 KV cache**（每轮 infer 整塔只跑 1 遍）、**没有 lm_head**
+（第 12 层交完 `hidden_states` 就收工——是截断的特征提取器，不是生成器）。
+另注意 qk-norm（头级 RMSNorm）是 Qwen3 相对 Llama 多出来的一格，NPU 侧它和
+qkv 投影、RoPE 一起被 `gemm_norm_rope_run_die_single` 收进同一个核。
+
+![Qwen3 语言塔 12 层逐运算展开](images/ch05/qwen3_llm_stack.svg)
+*图 5-3：自绘（`tools/mk_fig_vit_llm_dit_stacks.py`）——单层逐运算 + 出塔 tap；底部灰框是 trace 单轮核数对照（09 §10.6）。与 06 图 6-1、14 图 14-3 同一套读图语法，可三图并排对照。*
+
 ## 5. backbone 在整条链路里的"上下游"
 
 ```

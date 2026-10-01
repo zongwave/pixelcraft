@@ -474,6 +474,14 @@ K+V × 8 层 ≈ **30 GFLOP/去噪步**；K=4 就是 ~119 GFLOP，缓存后只�
 ![action head 的 attention 流程：维度 / 来源 / 用途 / 可缓存性](images/ch06/attn_flow.png)
 *图：三条流——**绿=条件流**（K 步恒定，可缓存）、**橙=草稿流**（每个去噪步都变）、**蓝=时间流**；**紫=掩码链路**（实核结论：传而不达，见 §6.8.5）。右框是 16 层 DiT 的交替结构：蓝色=看观测的 cross 层，橙色=动作 token 互通气的 self 层。 版本口径：按发布 tag `n1.5-release`（首个开源提交 `5e3ef5e` 无 `future_tokens`，别拿它当基准，见 §3 勘误①）。*
 
+上图是"三条流"的抽象视图；图 6-1 再往下钻一层——用与 01 章 llama_decoder.png
+同款的**逐运算画法**画一个 DiT Block 的完整计算（本教材体系里它是 DiT 的
+"总图"，故编号 6-1；出现较晚，排在 §6.8 内不碍事）：主干 = 草稿流 sa_embs，
+左侧绕行 = 残差，差别全部用红框标出。
+
+![DiT Block 逐运算展开：AdaLN / 交替 self-cross / GEGLU / ×4 欧拉圈](images/ch06/dit_stack.svg)
+*图 6-1：自绘（`tools/mk_fig_vit_llm_dit_stacks.py`）——一块只有一个注意力（偶层 cross：K/V=vl_embs，4 步不变可缓存；奇层 self），AdaLN 吃 temb 而 FF 前的 norm3 是普通 LN；外层红虚线大圈 = 4 步欧拉迭代。与 05 图 5-3、14 图 14-3 同一套读图语法。*
+
 ### 6.8.1 一次 `get_action` 里同时存在三个 attention 现场
 
 | 现场 | 位置 | Q 来自 | K/V 来自 | 头结构 | 随去噪步变？ | 可缓存？ |

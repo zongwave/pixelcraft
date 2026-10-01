@@ -165,6 +165,16 @@ residual_add_buf, unified_mha_forward / unified_mha_forward_qv_T, clone_split, p
 3. **导出 ≠ 启用**：`linear_qkv_run_fused` 有导出、有 ×4 计数，但那 4 次不在视觉塔；
    验证"某个融合是否真在跑"，永远看它的 kernel 在 trace 里的次数。
 
+图 14-2 是"结构→核"的三栏账本；图 14-3 换成与 01 章 llama_decoder.png 同款的
+**逐运算画法**：主干竖线 = hidden 逐级下行、左侧绕行 = 残差、中间 qkv 三叉 →
+⊗ 打分 → softmax → ⊗V → out proj 折回，MLP 展开为 fc1→gelu_tanh→fc2。
+**右侧红标签 = 当前主链真正发射的 LPU kernel 及其 trace 计数**，一眼看清
+"每一格运算落在哪个核上"。ViT 与 Llama 骨架的五处不同（无 causal mask、无 RoPE、
+无 CLS/尾头、无 KV cache、非 SwiGLU）在图底部集中列出。
+
+![SigLIP 27 层逐运算展开 + NPU kernel 落点](images/ch14/siglip_vit_stack.svg)
+*图 14-3：自绘（`tools/mk_fig_vit_llm_dit_stacks.py`）——pre-norm 双残差与 llama_decoder.png 逐格同构；红标签计数纪律见 §5 末三条。与 05 图 5-3、06 图 6-1 同一套读图语法。*
+
 ## 6. 另一条路：整层一次调用 `siglip_*_ffi_fused`（已导出，主链未启用）
 
 `groot_ops@v0.2 ops/torch_ops/fused_mha_out/fused_mha_out_ffi.cc` 里备着两档融合：

@@ -1,0 +1,122 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1500" height="1500" viewBox="0 0 1500 1500" font-family="Helvetica, Arial, 'Noto Sans CJK SC', 'WenQuanYi Zen Hei', sans-serif">
+<defs><marker id="arr" markerWidth="10" markerHeight="10" refX="7" refY="3" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L8,3 L0,6 Z" fill="#777"/></marker><marker id="arrRed" markerWidth="10" markerHeight="10" refX="7" refY="3" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L8,3 L0,6 Z" fill="#c0392b"/></marker></defs>
+<rect x="0" y="0" width="1500" height="1500" rx="0" fill="#ffffff" stroke="none" stroke-width="1.6"/>
+<text x="750.0" y="34" font-size="21" font-weight="bold" fill="#222" text-anchor="middle">DiT（三件套里的 “DiT”）：16 × DiT Block 逐运算 · self/cross 交替 ×4 欧拉步</text>
+<text x="750.0" y="58" font-size="12" font-weight="normal" fill="#777" text-anchor="middle">对标 llama_decoder.png 的画法 · 16 层/hidden 1536/32头×48/GEGLU inner 4×（06 §6.8）· cross_attention_dit.py 实核：一块只有一个注意力</text>
+<rect x="90" y="74" width="1320" height="56" rx="6" fill="#f2f2f2" stroke="#999" stroke-width="1.6" stroke-dasharray="6 4"/>
+<text x="110" y="96" font-size="12.5" font-weight="normal" fill="#444" text-anchor="start">循环外前置（每次 get_action 只 1 遍，4 步恒定）：vl_embs [B,296,2048] = backbone 输出 → vl_self_attention</text>
+<text x="110" y="118" font-size="12.5" font-weight="normal" fill="#444" text-anchor="start">（4 层 × 32 头 × 64）→ 供偶数层 cross 的 K/V（2048→1536 投影，可缓存，06 §6.7）</text>
+<rect x="60" y="150" width="1380" height="1140" rx="16" fill="none" stroke="#c0392b" stroke-width="2" stroke-dasharray="7 5"/>
+<text x="750" y="174" font-size="13.5" font-weight="bold" fill="#c0392b" text-anchor="middle">×4 欧拉步：本容器每轮 infer 跑 4 遍（a ← a + dt·v，flow_matching_action_head.py:404）——逐步变化的只有 a_t 与 temb</text>
+<rect x="90" y="190" width="320" height="47.0" rx="6" fill="#cfe3f7" stroke="#5b8db8" stroke-width="1.6"/>
+<text x="250.0" y="209.0" font-size="12.5" font-weight="normal" fill="#1d3d57" text-anchor="middle">a_t [B,16,32]（第 1 步 = randn）</text>
+<text x="250.0" y="227.0" font-size="12.5" font-weight="normal" fill="#1d3d57" text-anchor="middle">+ t 正弦编码 concat（t 副路）</text>
+<polyline points="250,237.0 250,278" fill="none" stroke="#777" stroke-width="1.7" marker-end="url(#arr)"/>
+<rect x="90" y="278" width="320" height="29.0" rx="6" fill="#cfe3f7" stroke="#5b8db8" stroke-width="1.6"/>
+<text x="250.0" y="297.0" font-size="12.5" font-weight="normal" fill="#1d3d57" text-anchor="middle">action_encoder：W2 (3072→1536) + swish</text>
+<polyline points="250,307.0 250,336" fill="none" stroke="#777" stroke-width="1.7" marker-end="url(#arr)"/>
+<rect x="90" y="336" width="320" height="29.0" rx="6" fill="#cfe3f7" stroke="#5b8db8" stroke-width="1.6"/>
+<text x="250.0" y="355.0" font-size="12.5" font-weight="normal" fill="#1d3d57" text-anchor="middle">+ 可学习 position_embedding（只加 16 动作）</text>
+<rect x="700" y="300" width="430" height="45.0" rx="6" fill="#f2f2f2" stroke="#999" stroke-width="1.6"/>
+<text x="915.0" y="318.5" font-size="11.5" font-weight="normal" fill="#1d3d57" text-anchor="middle">concat：state 1 + future_tokens 32（可学习 nn.Embedding）</text>
+<text x="915.0" y="335.5" font-size="11.5" font-weight="normal" fill="#1d3d57" text-anchor="middle">+ action 16 → sa_embs [B,49,1536]</text>
+<polyline points="698,340 412,380" fill="none" stroke="#999" stroke-width="1.7" marker-end="url(#arr)"/>
+<polyline points="250,365.0 250,396" fill="none" stroke="#777" stroke-width="1.7" marker-end="url(#arr)"/>
+<rect x="90" y="396" width="320" height="29.0" rx="6" fill="#cfe3f7" stroke="#5b8db8" stroke-width="1.6"/>
+<text x="250.0" y="415.0" font-size="12.5" font-weight="normal" fill="#1d3d57" text-anchor="middle">sa_embs [B,49,1536]（草稿流）</text>
+<polyline points="250,425.0 250,492" fill="none" stroke="#777" stroke-width="1.7"/>
+<rect x="95" y="446" width="1330" height="520" rx="12" fill="none" stroke="#1e8449" stroke-width="1.8" stroke-dasharray="6 5"/>
+<text x="760" y="466" font-size="13" font-weight="bold" fill="#1e8449" text-anchor="middle">16 × DiT Block（interleave：偶数层 cross / 奇数层 self——一块只有一个注意力）</text>
+<rect x="1050" y="474" width="212" height="28" rx="6" fill="#f2f2f2" stroke="#999" stroke-width="1.6"/>
+<text x="1156.0" y="492.5" font-size="11" font-weight="normal" fill="#1d3d57" text-anchor="middle">temb [B,1536]（TimestepEncoder）</text>
+<polyline points="1050,488 1012,488" fill="none" stroke="#777" stroke-width="1.7"/>
+<rect x="900" y="474" width="110" height="28" rx="6" fill="#cfe3f7" stroke="#5b8db8" stroke-width="1.6"/>
+<text x="955.0" y="492.5" font-size="11" font-weight="normal" fill="#1d3d57" text-anchor="middle">SiLU</text>
+<polyline points="898,488 860,488" fill="none" stroke="#777" stroke-width="1.7"/>
+<rect x="680" y="472" width="180" height="28" rx="6" fill="#cfe3f7" stroke="#5b8db8" stroke-width="1.6"/>
+<text x="770.0" y="490.5" font-size="10.5" font-weight="normal" fill="#1d3d57" text-anchor="middle">Linear(1536→3072)→scale|shift</text>
+<polyline points="760,502 760,520 440,520 440,532" fill="none" stroke="#999" stroke-width="1.7" stroke-dasharray="4 3" marker-end="url(#arr)"/>
+<polyline points="250,492 250,770" fill="none" stroke="#777" stroke-width="1.7"/>
+<polyline points="250,546 278,546" fill="none" stroke="#777" stroke-width="1.7"/>
+<rect x="280" y="530" width="210" height="28" rx="6" fill="#cfe3f7" stroke="#5b8db8" stroke-width="1.6"/>
+<text x="385.0" y="548.5" font-size="11.5" font-weight="normal" fill="#1d3d57" text-anchor="middle">AdaLN：LN(x)×(1+scale)+shift</text>
+<polyline points="490,546 508,546" fill="none" stroke="#777" stroke-width="1.7" marker-end="url(#arr)"/>
+<text x="500" y="537" font-size="11" font-weight="normal" fill="#666" text-anchor="middle">xn</text>
+<polyline points="508,556 508,664" fill="none" stroke="#999" stroke-width="1.7"/>
+<polyline points="508,556 528,556" fill="none" stroke="#777" stroke-width="1.7" marker-end="url(#arr)"/>
+<rect x="530" y="542" width="90" height="29.0" rx="6" fill="#cfe3f7" stroke="#5b8db8" stroke-width="1.6"/>
+<text x="575.0" y="561.0" font-size="12.5" font-weight="normal" fill="#1d3d57" text-anchor="middle">to_q</text>
+<text x="626" y="554" font-size="12" font-weight="normal" fill="#666" text-anchor="start">Q</text>
+<rect x="530" y="596" width="250" height="44.0" rx="6" fill="#fdecea" stroke="#c0392b" stroke-width="1.6"/>
+<text x="655.0" y="614.25" font-size="11" font-weight="bold" fill="#c0392b" text-anchor="middle">偶层：to_k/to_v(vl_embs 2048→1536)</text>
+<text x="655.0" y="630.75" font-size="11" font-weight="bold" fill="#c0392b" text-anchor="middle">奇层：to_k/to_v(xn 自身)</text>
+<polyline points="620,556 798,556 816,576" fill="none" stroke="#999" stroke-width="1.7" marker-end="url(#arr)"/>
+<polyline points="780,602 816,589" fill="none" stroke="#999" stroke-width="1.7" marker-end="url(#arr)"/>
+<circle cx="830" cy="582" r="12" fill="#fff" stroke="#555" stroke-width="1.7"/>
+<text x="830" y="586.5" font-size="13" font-weight="bold" fill="#333" text-anchor="middle">×</text>
+<polyline points="842,582 858,582" fill="none" stroke="#777" stroke-width="1.7" marker-end="url(#arr)"/>
+<rect x="860" y="564" width="130" height="45.0" rx="6" fill="#cfe3f7" stroke="#5b8db8" stroke-width="1.6"/>
+<text x="925.0" y="582.5" font-size="11.5" font-weight="normal" fill="#1d3d57" text-anchor="middle">softmax</text>
+<text x="925.0" y="599.5" font-size="11.5" font-weight="normal" fill="#1d3d57" text-anchor="middle">(QKᵀ/√48)·V</text>
+<polyline points="925,607 925,645 985,668" fill="none" stroke="#999" stroke-width="1.7" marker-end="url(#arr)"/>
+<polyline points="700,640 700,680 982,680" fill="none" stroke="#999" stroke-width="1.7"/>
+<circle cx="996" cy="680" r="12" fill="#fff" stroke="#555" stroke-width="1.7"/>
+<text x="996" y="684.5" font-size="13" font-weight="bold" fill="#333" text-anchor="middle">×</text>
+<text x="1014" y="672" font-size="10.5" font-weight="normal" fill="#666" text-anchor="start">×V</text>
+<rect x="930" y="714" width="130" height="28" rx="6" fill="#cfe3f7" stroke="#5b8db8" stroke-width="1.6"/>
+<text x="995.0" y="732.5" font-size="11.5" font-weight="normal" fill="#1d3d57" text-anchor="middle">to_out</text>
+<polyline points="996,694 996,712" fill="none" stroke="#999" stroke-width="1.7" marker-end="url(#arr)"/>
+<polyline points="930,728.0 310,728.0 310,780 264,780" fill="none" stroke="#999" stroke-width="1.7" marker-end="url(#arr)"/>
+<text x="585" y="748" font-size="10.5" font-weight="normal" fill="#666" text-anchor="start">attention_outputs：QK 矩阵极小 49×296——成本在 K/V 投影那两刀</text>
+<circle cx="250" cy="780" r="13" fill="#fff" stroke="#555" stroke-width="1.7"/>
+<text x="250" y="784.5" font-size="13" font-weight="bold" fill="#333" text-anchor="middle">+</text>
+<polyline points="250,500 215,500 215,780 237,780" fill="none" stroke="#999" stroke-width="1.7" marker-end="url(#arr)"/>
+<text x="205" y="784" font-size="12.5" font-weight="bold" fill="#444" text-anchor="end">Residual add</text>
+<polyline points="250,795 250,819" fill="none" stroke="#777" stroke-width="1.7"/>
+<polyline points="250,836 278,836" fill="none" stroke="#777" stroke-width="1.7"/>
+<rect x="280" y="820" width="200" height="44.0" rx="6" fill="#cfe3f7" stroke="#5b8db8" stroke-width="1.6"/>
+<text x="380.0" y="838.25" font-size="11" font-weight="normal" fill="#1d3d57" text-anchor="middle">norm3 = LayerNorm</text>
+<text x="380.0" y="854.75" font-size="11" font-weight="normal" fill="#1d3d57" text-anchor="middle">（普通 LN，不吃 temb）</text>
+<polyline points="492,836 510,836" fill="none" stroke="#777" stroke-width="1.7" marker-end="url(#arr)"/>
+<rect x="512" y="820" width="250" height="28" rx="6" fill="#cfe3f7" stroke="#5b8db8" stroke-width="1.6"/>
+<text x="637.0" y="838.5" font-size="11.5" font-weight="normal" fill="#1d3d57" text-anchor="middle">GEGLU：fc → 2×6144，左半过 gelu</text>
+<circle cx="800" cy="836" r="12" fill="#fff" stroke="#555" stroke-width="1.7"/>
+<text x="800" y="840.5" font-size="13" font-weight="bold" fill="#333" text-anchor="middle">×</text>
+<polyline points="764,836 786,836" fill="none" stroke="#777" stroke-width="1.7" marker-end="url(#arr)"/>
+<rect x="814" y="822" width="170" height="28" rx="6" fill="#cfe3f7" stroke="#5b8db8" stroke-width="1.6"/>
+<text x="899.0" y="840.5" font-size="11.5" font-weight="normal" fill="#1d3d57" text-anchor="middle">fc_out 6144→1536</text>
+<polyline points="814,836 330,836 330,900 264,900" fill="none" stroke="#999" stroke-width="1.7" marker-end="url(#arr)"/>
+<circle cx="250" cy="900" r="13" fill="#fff" stroke="#555" stroke-width="1.7"/>
+<text x="250" y="904.5" font-size="13" font-weight="bold" fill="#333" text-anchor="middle">+</text>
+<polyline points="250,794 215,794 215,900 237,900" fill="none" stroke="#999" stroke-width="1.7" marker-end="url(#arr)"/>
+<text x="205" y="904" font-size="12.5" font-weight="bold" fill="#444" text-anchor="end">Residual add</text>
+<polyline points="250,915 250,932" fill="none" stroke="#777" stroke-width="1.7"/>
+<rect x="1090" y="700" width="320" height="45.0" rx="6" fill="#fdecea" stroke="#c0392b" stroke-width="1.6"/>
+<text x="1250.0" y="718.5" font-size="11.5" font-weight="bold" fill="#c0392b" text-anchor="middle">K/V 冻结红利：偶层的 K/V 在 4 步之间完全不变</text>
+<text x="1250.0" y="735.5" font-size="11.5" font-weight="bold" fill="#c0392b" text-anchor="middle">→ 只缓存 K/V（8/16 层，约 14 MiB、省 ~90 GFLOP）</text>
+<polyline points="1088,715 784,630" fill="none" stroke="#c0392b" stroke-width="1.7" stroke-dasharray="6 4" marker-end="url(#arr)"/>
+<rect x="1090" y="796" width="320" height="45.0" rx="6" fill="#f2f2f2" stroke="#999" stroke-width="1.6"/>
+<text x="1250.0" y="814.5" font-size="11.5" font-weight="normal" fill="#1d3d57" text-anchor="middle">块内无位置编码（pos_embed=null）、无 mask；</text>
+<text x="1250.0" y="831.5" font-size="11.5" font-weight="normal" fill="#1d3d57" text-anchor="middle">顺序信息只在塔头的 position_embedding 与 temb</text>
+<polyline points="250,938 250,970" fill="none" stroke="#777" stroke-width="1.7" marker-end="url(#arr)"/>
+<rect x="75" y="970" width="350" height="47.0" rx="6" fill="#cfe3f7" stroke="#5b8db8" stroke-width="1.6"/>
+<text x="250.0" y="989.0" font-size="12.5" font-weight="normal" fill="#1d3d57" text-anchor="middle">出口：proj_out_1(SiLU(temb))→shift/scale；</text>
+<text x="250.0" y="1007.0" font-size="12.5" font-weight="normal" fill="#1d3d57" text-anchor="middle">norm_out×(1+scale)+shift → proj_out_2 →1024</text>
+<rect x="75" y="1042" width="350" height="29.0" rx="6" fill="#f2f2f2" stroke="#999" stroke-width="1.6"/>
+<text x="250.0" y="1061.0" font-size="12.5" font-weight="normal" fill="#1d3d57" text-anchor="middle">取尾 16 token：pred[:, -action_horizon:]</text>
+<polyline points="250,1017.0 250,1040" fill="none" stroke="#777" stroke-width="1.7" marker-end="url(#arr)"/>
+<rect x="75" y="1094" width="350" height="29.0" rx="6" fill="#cfe3f7" stroke="#5b8db8" stroke-width="1.6"/>
+<text x="250.0" y="1113.0" font-size="12.5" font-weight="normal" fill="#1d3d57" text-anchor="middle">action_decoder（CategorySpecific MLP 1024→32）→ v</text>
+<polyline points="250,1071.0 250,1092" fill="none" stroke="#777" stroke-width="1.7" marker-end="url(#arr)"/>
+<rect x="75" y="1146" width="350" height="29.0" rx="6" fill="#fdecea" stroke="#c0392b" stroke-width="1.6"/>
+<text x="250.0" y="1165.0" font-size="12.5" font-weight="bold" fill="#c0392b" text-anchor="middle">a ← a + dt·v（欧拉一步）</text>
+<polyline points="250,1123.0 250,1144" fill="none" stroke="#777" stroke-width="1.7" marker-end="url(#arr)"/>
+<polyline points="427,1164 1345,1164 1345,214 412,214" fill="none" stroke="#c0392b" stroke-width="1.7" stroke-dasharray="7 4" marker-end="url(#arrRed)"/>
+<text x="1352" y="500" font-size="15" font-weight="bold" fill="#c0392b" text-anchor="start">×4</text>
+<polyline points="250,1175 250,1318" fill="none" stroke="#777" stroke-width="1.7"/>
+<rect x="55" y="1320" width="390" height="29.0" rx="6" fill="#fff" stroke="#999" stroke-width="1.6"/>
+<text x="250.0" y="1339.0" font-size="12.5" font-weight="normal" fill="#1d3d57" text-anchor="middle">去噪完成的 actions [B,16,32] → 反归一化（图 4-1 出口）</text>
+<rect x="90" y="1380" width="1320" height="86" rx="6" fill="#fafafa" stroke="#ddd" stroke-width="1.6"/>
+<text x="110" y="1410" font-size="12.5" font-weight="normal" fill="#555" text-anchor="start">NPU 落点（trace 单轮，含 4 步，09 §10.6）：adaln_qkv_run_die ×64（=16×4，AdaLN 与 QKV 投影同核融合）·</text>
+<text x="110" y="1434" font-size="12.5" font-weight="normal" fill="#555" text-anchor="start">fused_mha_out ×68（=16×4+4，多的 4 次是 vl_self_attention）· mlp_gelu_norm ×64 · linear_qkv_run_fused ×4（条件流 qkv 三合一）</text>
+</svg>

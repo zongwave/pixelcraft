@@ -209,29 +209,24 @@ s.path([(558, 1334), (434, 1334)], color="#999")
 dit = s.box(CX - 130, 1310, 260, ["16 × DiT Block", "hidden 1536 · 偶数层 cross"], where="dit", lsize=14)
 s.path([(432, 1374), (500, 1374), (500, 1444), (768, 1444)], color="#999", dash="4 3")
 s.rect(770, 1180, 620, 316, "none", "#999", rx=10, dash="4 3")
-s.text(1080, 1200, "1 层 DiT Block 展开（06 §6.8：三种注意力各归其位）", 12, bold=True,
+s.text(1080, 1200, "1 层 DiT Block 展开（06 §6.8：一块只有一个注意力——偶 cross / 奇 self）", 12, bold=True,
        anchor="middle", fill="#555")
-dx = 790
-seq = [("AdaLN", 76), ("Self-Attn", 92), ("+", 26), ("Cross-Attn", 96), ("+", 26)]
-for lab, wdt in seq:
-    if lab == "+":
-        s.node(dx + 13, 1240, "+", r=13)
-        dx += 26 + 16
-    else:
-        s.box(dx, 1222, wdt, [lab], where="dx", lsize=11.5)
-        dx += wdt + 16
-s.path([(1157, 1255), (1157, 1280), (875, 1280), (875, 1298)], color="#999")
-s.path([(1113, 1335), (1113, 1358)], color="#999")
+s.box(790, 1222, 112, ["AdaLN（temb）"], where="d1", lsize=11)
+s.path([(904, 1240), (922, 1240)], color="#999")
+s.box(924, 1222, 170, ["Attention", "偶=cross · 奇=self"], red=True, where="d1a", lsize=10.5)
+s.path([(1096, 1240), (1107, 1240)], color="#999")
+s.node(1120, 1240, "+", r=13)
+s.path([(1120, 1253), (1120, 1284), (895, 1284), (895, 1298)], color="#999")
 d2x = 830
-s.box(d2x, 1300, 90, ["AdaLN"], where="d2", lsize=11.5)
-s.path([(d2x + 92, 1320), (d2x + 110, 1320)], color="#999")
-s.box(d2x + 112, 1300, 130, ["FF GEGLU ×4"], where="d2b", lsize=11.5)
-s.node(d2x + 270, 1320, "+")
-s.path([(d2x + 244, 1320), (d2x + 255, 1320)], color="#999")
+s.box(d2x, 1300, 130, ["LayerNorm（norm3）", "普通 LN，不吃 temb"], where="d2", lsize=10.5)
+s.path([(d2x + 132, 1320), (d2x + 150, 1320)], color="#999")
+s.box(d2x + 152, 1300, 130, ["FF GEGLU ×4"], where="d2b", lsize=11.5)
+s.node(d2x + 310, 1320, "+")
+s.path([(d2x + 284, 1320), (d2x + 295, 1320)], color="#999")
 s.box(d2x, 1384, 200, ["cross K/V = 脑1 特征", "4 步不变 → 只缓存 K/V", "（8/16 层，约 14 MiB）"],
       red=True, where="kv")
 s.path([(1235, 1086), (1235, 1410), (1034, 1410)], color=RED, dash="7 4", marker="arrRed")
-s.text(1080, 1478, "self：动作 16 token 互相看；cross：查图文背景（vl_embs 2048→1536，32 头×48）",
+s.text(1080, 1478, "self：动作 16 token 互相看；cross：查图文背景（vl_embs 2048→1536，32 头×48）；两个 ⊕ = 残差",
        11.5, anchor="middle", fill=GRAY)
 arr_down(dit + 2, 1492)
 op = s.box(CX - 130, 1492, 260, ["out_proj 1536→32（速度场 v）"], where="op")
