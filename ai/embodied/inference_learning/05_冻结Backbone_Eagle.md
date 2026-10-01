@@ -233,6 +233,14 @@ LLM 用 KV cache 缓存"自己历史的 K/V"，gr00t 用冻结 backbone 缓存"�
 ![Qwen3 语言塔 12 层逐运算展开](images/ch05/qwen3_llm_stack.svg)
 *图 5-3：自绘（`tools/mk_fig_vit_llm_dit_stacks.py`）——单层逐运算 + 出塔 tap；底部灰框是 trace 单轮核数对照（09 §10.6）。与 06 图 6-1、14 图 14-3 同一套读图语法，可三图并排对照。*
 
+最后是这套结论的**物理直觉版**：gr00t 每轮推理面向一个**新的观测**——过往状态经
+动作执行的结果，已被物理世界本身写回下一帧观测里；**世界就是 KV cache**，记忆住在
+闭环里而不是模型里。KV cache 的缺席是"闭环策略"范式的推论；而 causal 是 Qwen3
+权重的归纳偏置，与闭环无关，因此仍在（NPU 核 `qwen3_attention_ffi.cc:306` 直接写死
+causal GQA）。这里的 Qwen3 准确叫法是**截断式 prefill**：深度上 28 层 pop 到 12，
+时间上只 prefill 永不 decode。"AR 三件套（causal / 逐 token 生成 / KV cache）到底
+哪些能拆哪些不能拆"的系统对照，见 06 章 §6.8.8。
+
 ## 5. backbone 在整条链路里的"上下游"
 
 ```

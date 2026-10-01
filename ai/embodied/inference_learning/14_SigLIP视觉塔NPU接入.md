@@ -45,6 +45,60 @@ vendored remote-code）：
 27 层 / hidden 1152 / 16 头（head_dim 72）/ patch 14 / 输入 224 / MLP inter 4304 /
 **无 CLS**（没有 pooling head 那条路，见 §4.2）/ 可学习 PE `[256,1152]` / 每图 `(224/14)² = 256` token。
 
+## 2.5 从像素到 256 个 token：14×14 patch 与一发 Conv2d
+
+先校准一个高频口误：**"14×14"说的是每个小块的空间尺寸（14×14 像素），不是块数**。
+一张 224×224 按 14 一格切开，切出的是 **16×16 = 256 块**。
+
+整个入口只有**一个 Conv2d 加一次加法**（`modeling_siglip.py:245` `SiglipVisionEmbeddings`，
+transformers 4.51.3，行号实测）：
+
+```python
+self.patch_embedding = nn.Conv2d(3, 1152, kernel_size=14, stride=14, padding="valid")  # :253
+...
+patch_embeds = self.patch_embedding(pixel_values)              # :307  [B,1152,16,16]
+embeddings   = patch_embeds.flatten(2).transpose(1, 2)         # :308  [B,256,1152]
+embeddings   = embeddings + self.position_embedding(self.position_ids)  # 可学习 PE [256,1152]
+```
+
+**kernel == stride == 14 是全部机关**：卷积窗以 14 像素为步长滑过整图，
+**不重叠、不留缝**（224 = 14×16 恰好整除），每个像素恰好被一个窗口看到一次。
+输出特征图 16×16，每个空间位置 = 一块 patch 的嵌入。
+
+**Conv2d 是化装的 Linear**：普通卷积窗口重叠、权重跨窗口共享；这里窗口恰好铺满
+图像，于是这发 conv 严格等价于——
+
+> 把每块 patch 摊平成 `14×14×3 = 588` 维向量（3 通道 × 14 行 × 14 列），
+> 过**同一个** `Linear(588→1152)`。权重 `[1152,3,14,14]` reshape 成 `[1152,588]` 即用。
+
+卷积语法买到的只有两件事：588 个数的 gather 与矩阵乘在**一个 kernel** 里完成；
+访存模式保持图像式的规整。于是每个输出通道是一个**可学习的 14×14 彩色滤波器**：
+权重的 588 个数与该块像素值做内积再加 bias——训练后这些滤波器自组织成带方向的
+条纹色彩检测器（CNN 第一层的同族图景），1152 通道 = 1152 种"视觉词"的打分。
+
+**账本（每图 224×224）**：
+
+| 项 | 值 |
+|---|---|
+| patch 数 | (224/14)² = **256**；无 CLS、无额外 token（SigLIP 特色，§4.2） |
+| 每 patch 参数 | 588×1152 + 1152(bias) ≈ **678k**（即 conv 权重 reshape [1152,588]） |
+| 每 patch 计算 | 588×1152 ≈ 0.68 MMAC |
+| 每图计算 | 256 × 0.68 ≈ **173 MMAC**（~0.35 GFLOP） |
+| PE 参数 | 256×1152 ≈ 295k，**可学习**（不用 RoPE——patch 无"序列相对位置"可言，位置即格子） |
+
+PE 必须在塔头加，因为 attention 对 token 顺序是置换不变的；256 个位置向量把每个
+query 的打分分布"钉"在图像的确定方位上。源码里的 `interpolate_pos_encoding`
+（PE 网格双三次重采样）是为多分辨率输入的分支——**gr00t 输入恒 224，永远走不到**。
+
+**三相机**：同一塔同一权重，三张图拼 batch 一趟过（trace 里 `conv2d_patch_embed ×1`
+每轮一发，是整塔唯一锚点，§5），出塔共 `256×n_img` 个 token，过 `mlp1 1152→2048`
+后按 `151669` 槽位原位回写 LLM 序列（图 14-1）。
+
+**NPU 落点**：这是全塔唯一一处输入是**像素而不是激活**的地方，不属于"通用矩阵乘"
+的形状，所以 groot_ops 给它单独一核 `conv2d_patch_embed_run_die`——patch 的
+gather + matmul 融合成一发射，输出直接是后续核认得的布局货币。
+
+
 ## 3. 调用链：一次 get_action 里 SigLIP 出现在哪（图 14-1）
 
 ![SigLIP 在 gr00t 中的调用链与 NPU 替换点](images/ch14/siglip_call_flow.svg)
