@@ -358,6 +358,78 @@ ON/OFF 输出**逐位一致 `maxdiff=0.0`**，`round 0.113 s(OFF) vs 0.114 s(ON)
 （526-leaf 逐算子对账，不是只看 `action_pred`）、`validate_npu.sh`（commit 前一键）。
 v0.2 的 3cam golden：`action_pred` 0.99999 / `left_hand` 0.99200 / `right_hand` 1.00000。
 
+## 7.5 三处 attention × NPU kernel：分界线画在四条轴上（图 9-9）
+
+06 章 §6.8.9 把三塔 attention 的**语义**并排摊开之后，课堂上紧接着的一问是纯工程的：
+**“回到算子接入，这三处 attention 需要各自不同的实现吗？”** 答案是——
+**语义上同一族，工程上今天确实是三个核（入口/出口融合是四套），但分界线不画在“哪个塔”上。**
+
+### 7.5.1 先数 trace：一轮推理里三处 attention 各自发的是哪个核
+
+`logs/trace_current_clean/n15_sd3_chrome_trace.json`（N1.5 单轮热轮，2026-09-30 抓）：
+
+| 核符号 | 次数 | 归属（按结构对账） |
+|---|---|---|
+| `unified_mha_run_die_batch_emb` | **27** | SigLIP 27 层（三相机走 batch 维，embed-major Q/V 直出） |
+| `qwen3_attention_run_die` | **12** | Qwen3 12 层；配套 `gemm_norm_rope_run_die_single` ×12 |
+| `fused_mha_out_run_die_single_vraw_qraw` | **68** | DiT 16 块 × 4 去噪步 = 64，＋ vl_self_attention 4 层 = 68 |
+| `adaln_qkv_run_die` | 64 | DiT 的 adaLN 调制 + QKV 三合一（16 × 4） |
+| `linear_qkv_run_fused` | 4 | 这 4 发在 **vl 塔**，不在视觉塔（14 章 §5“计数归因三纪律”第 3 条“导出 ≠ 启用”的又一次印证） |
+
+旁证：另一份 3cam/2iter trace 里 `unified_mha_run_die_batch` ×54 = 27×2、
+`qwen3_attention` ×24 = 12×2 ✓。**主链 trace 里 `batch_attention`（paged，带
+`k_tab/v_tab/idx/cu/su` + `causal` 实参）与 `reshape_and_cache_flash` 出现 0 次**——
+那是 vLLM 血统的第四种实现，备而未用：gr00t 单轮 prefill，根本没有 KV cache 要分页
+（06 章 §6.8.8）。
+
+### 7.5.2 为什么不能一个核：四条轴
+
+| 轴 | SigLIP | Qwen3 | DiT ＋ vl |
+|---|---|---|---|
+| mask | 无（256×256 全双向） | **下三角**：核内生成列阈值，仅对角块走 masked matmul | 无（self 全 token、cross 全 encoder 长度） |
+| 头型 | MHA：K 的 head 数 == Q 的 | **GQA 16Q/8KV**：q 头 h → kv 头 h/group，多一层分组索引 | MHA |
+| 布局契约 | Q^T **已预乘 scale**；V 显式补 ones 行 `[H,D+1,L]`；L_Q 须是 tile B 的倍数 | Q/K/V **全 token-major**（`gemm_norm_rope` 直出免 permute）；scale 是 FFI 实参（核内 DEQUANT 注入）；ones 行核内生成；L_Q 尾块核内处理 | Q^T head-major + V 补 ones 行；K token-major；**后面直接串 to_out 的 gemm** |
+| 编译期 tile B | 128（256 = 2×128 免补零） | 64（调用实参） | DiT 64（T_q=49 → 补零）/ vl 128 |
+
+三份内核源码的自述最能说明“同一族、三份拷贝”：`unified_mha_kernel.ac` 写着
+**“统一 MHA flash attention——三 site 通用”**；`qwen3_attention_kernel.ac` 写着
+**“结构镜像 unified_mha，增量 = GQA 分组 + 硬件因果 mask”**；`attention_prefill_kernel.ac`
+写着“结构对齐 unified_mha”（bf16 type-generic 版）。共享的是骨架（32 核 4 cluster、
+K/V 驻 cluster L2 由 4 核复用、online-softmax 滚动归一）；没共享成一份二进制，是因为
+① tile B 是**编译期模板**，② 布局契约不同（scale 与 ones 行在 host 还是核内），
+③ mask/GQA 分支会拖慢不需要它的那两路。**Qwen3 在 mask 与 GQA 两轴上同时跳出去，
+所以它必须独立成核；DiT 与 SigLIP 在四轴上同类**，只差 tile B、batch 布局与出口融合。
+
+![三处 attention 与它们各自的 NPU kernel](images/ch09/attention_kernel_mapping.svg)
+
+*图 9-9：自绘（`tools/mk_fig_ch09_attention_kernels.py`）——三列 = 三个塔，每列自上而下是
+「QKV 怎么来 → attention 本体 → 出口」，红框是真机 trace 里数出来的 kernel 名与次数，
+虚线框是该现场的形状/契约属性；底部三块分别是源码自述、上下游融合表、三条判据。*
+
+### 7.5.3 更值得注意的：真正的分化发生在 attention 的**上下游**
+
+| 塔 | QKV 怎么来（入口融合） | attention 本体 | 出口融合 |
+|---|---|---|---|
+| SigLIP | 4 × `gemm_bias`（q/k/v/o 各一发） | `unified_mha_batch_emb` | `gemm_bias`(out_proj) |
+| Qwen3 | `gemm_norm_rope`（RMSNorm+RoPE+QK-norm+QKV 一合） | `qwen3_attention`（token-major 直进直出） | `gemm_bias`(o_proj)；另有 `Qwen3LayerFfiFused` 把整层八步一发射 |
+| DiT | `adaln_qkv`（adaLN 调制 + QKV 三合一） | `fused_mha_out`（attention + to_out 一次发射） | 已折进 to_out |
+| vl 塔 | `linear_qkv_run_fused` | `fused_mha_out` | 已折进 to_out |
+
+三行的入口与出口都不一样，而这与 attention 本体无关：SigLIP 的 q/k/v 是同一份 hidden
+的三次投影；Qwen3 要把 RMSNorm+RoPE+QK-norm 一起折进 QKV；DiT 的 QKV 必须先被 adaLN 的
+scale/shift 调制过。**融合的机会长在边界上，不长在运算上**——再往粗走一格就是
+`Qwen3LayerFfiFused` / `dit_block_fused` / `siglip_layer_ffi_fused`（后者已导出未启用，
+14 章 §6），也就是 §4.3 融合粒度阶梯（960→192→64 次发射）在三个塔上的重演。
+
+**三条判据（带走这三句就够）**：
+
+1. 分界画在**四条轴**上：causal? × GQA? × 布局契约 × tile B；不画在“哪个塔”上。
+2. “三处 attention” ≠ “三个核”：DiT 的 self 与 cross **共用** `fused_mha_out`——
+   `L_Q/L_KV` 是运行时参数，换 K/V 只是换指针；2048→1536 在建模块时就焊死在
+   `W_K/W_V` 里（06 章 §6.8.2），核只认“非因果 MHA、hd=48、后面串一发 gemm”。
+3. **语义不进核**：cross“看 backbone”这件事在 kernel 里没有任何痕迹。语义住在权重和
+   调用点里；这也是为什么换本体（embodiment）不换核、换 head_dim 才换核。
+
 ## 8. 两者的分工一句话总结
 
 | 组件 | 作用 | 让什么跑在 NPU |
