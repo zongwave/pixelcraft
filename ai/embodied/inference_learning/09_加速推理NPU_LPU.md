@@ -447,9 +447,11 @@ kernel 视角还要再切两刀：动作头的 `vl_self_attention`（4 层，独
 
 三条要记住的：
 
-1. **③ 是最容易被漏掉的钱**：`action_head.vl_self_attention` 只有 4 层，但**单发 attention 806 µs
-   是全场第二贵的单次 kernel**（第一是 Qwen3 swiglu 的 727 µs——它 12 发），整相 7.44 ms 占 busy 9.3%，
-   气泡 45.7%。权重形状是 `to_q/to_k/to_v/to_out` 全 `[2048,2048]`、FF `[8192,2048]+[2048,8192]`
+1. **③ 是最容易被漏掉的钱**：`action_head.vl_self_attention` 只有 4 层，但**单发 806 µs 的 attention
+   就是整轮最贵的一发 kernel**。单发时长前六名（trace 逐发排序）：
+   **806 vl attention → 731 Qwen3 swiglu → 662 空转 `Fill`（P2 里那发未归因的）→ 473 vl FF →
+   470 cross-MISS 的 `adaln_qkv` → 447 vl QKV**——**前六里 vl 塔独占三席**，
+   而这四层加起来整相才 7.44 ms，**气泡却高达 45.7%**。权重形状是 `to_q/to_k/to_v/to_out` 全 `[2048,2048]`、FF `[8192,2048]+[2048,8192]`
    （safetensors 头实测），与 backbone **同宽 2048 ⇒ 零投影接缝**，所以它常年不被写进任何架构图。
 2. **④⑤ 共用一个核但成本差一倍**（93 µs vs 42 µs）：差的不是语义，是 `L_KV` 从 49 变 296。
    这是 §7.5.2 判据"语义不进核，形状才进核"的钱化版本。
